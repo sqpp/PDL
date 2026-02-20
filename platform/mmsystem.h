@@ -1,0 +1,14 @@
+#ifndef PDW_MMSYSTEM_H
+#define PDW_MMSYSTEM_H
+#include "pdw_linux_types.h"
+#define WAVE_FORMAT_PCM 1
+#define WAVE_MAPPER 0
+#define CALLBACK_FUNCTION 0x30000
+#define MMSYSERR_NOERROR 0
+#define MMSYSERR_ALLOCATED 4
+#define MMSYSERR_BADDEVICEID 2
+#define MMSYSERR_NODRIVER 6
+#define MMSYSERR_NOMEM 7
+#define WAVERR_BADFORMAT 32
+#define GHND 0x42
+#endif

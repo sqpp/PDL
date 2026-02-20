@@ -1,0 +1,14 @@
+# Build
+build/
+build_linux/
+*.o
+*.a
+pdw_linux
+
+# IDE / editor
+.vs/
+*.swp
+*~
+
+# Local
+*.local
