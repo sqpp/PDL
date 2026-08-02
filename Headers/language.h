@@ -1,5 +1,5 @@
-#ifndef PDW_LANG_H
-#define PDW_LANG_H
+#ifndef PDL_LANG_H
+#define PDL_LANG_H
 
 
 struct lang_db_info {

@@ -13,7 +13,7 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "Headers/pdw.h"
+#include "Headers/pdl.h"
 #include "Headers/gfx.h"
 #include "Headers/misc.h"
 #include "Headers/helper_funcs.h"
@@ -65,6 +65,9 @@ POCSAG::POCSAG()
 	srcn  = 0;
 	srca  = 0;
 	bAddressWord = false;
+	addr_errl = 0;
+	msg_bch_errors = 0;
+	msg_bch_codewords = 0;
 	pocsag_baud_rate = STAT_POCSAG1200;
 }
 
@@ -91,9 +94,18 @@ void POCSAG::frame(int bit)
 
 	if (bit == 1) sr1 = sr1 ^ 0x01;
 
-	else if (bit == -1)	// reset
+	else if (bit == -1)	// reset (leave POCSAG / end of burst)
 	{
 		bSynced = false;
+
+		/*
+		 * Flush any pending page first. Without this, a page that never saw
+		 * an IDLE codeword (common when the audio goes quiet between pages)
+		 * stays buffered until the *next* address arrives — so live decode
+		 * looks one message behind.
+		 */
+		if (bAddressWord)
+			show_message();
 
 		reset(); // reset in preperation of next message
 
@@ -117,6 +129,14 @@ void POCSAG::frame(int bit)
 		}
 		else if (nh == 32)	// 32 errors, so must be inverted
 		{
+#ifdef __linux__
+			/* PagerCast owns polarity via its slicer — don't flip global invert mid-stream. */
+			extern int pdl_pagercast_is_wanted(void);
+			extern void pdl_pagercast_flip_bit_polarity(void);
+			if (pdl_pagercast_is_wanted())
+				pdl_pagercast_flip_bit_polarity();
+			else
+#endif
 			InvertData();	// Invert receive polarity
 
 			bSynced = true;
@@ -134,14 +154,22 @@ void POCSAG::frame(int bit)
 		{
 			nh = nOnes(sr0 ^ 0x7A89) + nOnes(sr1 ^ 0xC197);
 
-			if (nh < 5)
+			/*
+			 * Idle must be exact (or near-exact on noisy RF). Soft match nh < 5
+			 * truncated short alpha pages mid-body → "15555550100: @*" instead of
+			 * the real text. PagerCast baseband is clean digital — require exact idle.
+			 */
+			int idle_max = 2; /* RF: allow up to 2 bit errors */
+#ifdef __linux__
+			extern int pdl_pagercast_is_wanted(void);
+			if (pdl_pagercast_is_wanted())
+				idle_max = 0; /* exact idle only on clean digital stream */
+			else if (bAddressWord && wordc > 0)
+				idle_max = 1; /* stricter once payload started */
+#endif
+			if (nh <= idle_max)
 			{
 				pocbit = 170;	// keep from switching back to flex if idle
-
-				// at this point it is possible we still have a short message
-				// in that we haven't even begun to show on screen yet...
-				// This will be true for all messages with wordc < 8.
-				// Next line finds them and flushes them out of the woodwork
 
 				if (bAddressWord)
 				{
@@ -173,6 +201,9 @@ void POCSAG::process_word(int fn2)
 
 	if (ob[MSB] == 1)	// MSB=1 means message
 	{
+		msg_bch_errors += errl;
+		msg_bch_codewords++;
+
 		for (i=1; i<=20; i++)
 		{
 			sr = sr >> 1;
@@ -183,7 +214,6 @@ void POCSAG::process_word(int fn2)
 			{
 				if (errl > 2)
 				{
-//					sr ^= 0x1000;	// keep error correcting info also
 					message_color_alp[nalp]=COLOR_BITERRORS;
 				}
 				else message_color_alp[nalp]=COLOR_MESSAGE;
@@ -220,11 +250,7 @@ void POCSAG::process_word(int fn2)
 	}
 	else		// MSB bit = 0 means address
 	{
-		// message with more than a word in them are OK; If we had a Tone Only
-		// address then wordc is zero but lwad would be set - so we call show_short
-		// to display the tone only address. Previously this routine was always
-		// called when wordc was zero which made the "fake" tone only display
-
+		// Flush any previous pending message before a new address.
 		if (bAddressWord)
 		{
 			show_message();
@@ -245,8 +271,9 @@ void POCSAG::process_word(int fn2)
 		// to complete the capcode, we put the frame number into the 3 lsb bits
 		pocaddr += (long) ((fn2 >> 1) & 0x07);
 
-		// tag capcode as bad if uncorrectable error in address word
-		if (errl > 2) pocaddr ^= 0x400000l;
+		addr_errl = errl;
+		msg_bch_errors += errl;
+		msg_bch_codewords++;
 
 		// get function number --- unfortunately doesn't seem to tell you
 		// whether message is alpha or numeric
@@ -286,17 +313,7 @@ void POCSAG::show_addr(bool bAlpha)
 
 	pocaddr = pocaddr & 0x1fffffl;
 
-	if (pocaddr > 0x3fffffl)	// If error in capcode don`t display it.
-	{
-		strcpy(Current_MSG[MSG_CAPCODE], "???????");
-		function=0;
-		CountBiterrors(5);
-	}
-	else	 // No errors
-	{
-		sprintf(Current_MSG[MSG_CAPCODE], "%07li", pocaddr);				// Add capcode
-		CountBiterrors(0);
-	}
+	sprintf(Current_MSG[MSG_CAPCODE], "%07li", pocaddr);
 
 	/* Show Capcode */
 	
@@ -362,25 +379,31 @@ int POCSAG::GetMessageType()
 		else break;
 	}
 
+	/*
+	 * PDL function is wire_fn+1 (wire 0..3 → 1..4).
+	 * PagerCast: wire F3 = alphanumeric, wire F0 = classic numeric; default
+	 * numeric sends often use wire F1 (PDL function 2). Payload type is not
+	 * always the function bits — still use heuristics below when ambiguous.
+	 *
+	 * Function 4 must beat the short-message "rest bits → NUMERIC" rule so
+	 * short alpha ("hi") is not shown as numeric garbage. Classic numeric
+	 * (function 1) and common F1 numeric (function 2) must still win as NUMERIC.
+	 */
+	if (Profile.pocsag_fnu)
+		return((function == 4) ? TYPE_ALPHA : TYPE_NUMERIC);
+	if (function == 4)
+		return(TYPE_ALPHA);
+	if (function == 1 || function == 2)
+		return(TYPE_NUMERIC);
+
 	if (wordc < 7)					// If we have less than 7 messagewords
 	{
-//		restbits = (20*wordc) % 7;
-//		startbit = 21-restbits;
-//		strncpy(szRestAlphaBits, &ob[startbit], restbits);
-//		szRestAlphaBits[restbits] = '\0';
-//		int test = szRestAlphaBits[0] + szRestAlphaBits[1] + szRestAlphaBits[2] + szRestAlphaBits[3] + szRestAlphaBits[4] + szRestAlphaBits[5] + szRestAlphaBits[6];
 		if (strchr(szRestAlphaBits, char(1)))
-//		if (strstr(szRestAlphaBits, "1")) 
 		{
 			return(TYPE_NUMERIC);	// Last (wordc % 7) bits != 0, so this is Numeric
 		}
 	}
 	else return(TYPE_ALPHA);		// More than 6 messagewords, must be alphanumeric
-
-	if (Profile.pocsag_fnu)
-	{
-		return((function == 4) ? TYPE_ALPHA : TYPE_NUMERIC);
-	}
 
 	// Store bits as numeric characters in array num[]
 	// Penalize "bad" numeric characters 'U','[',']','*','-' and ' '
@@ -478,6 +501,11 @@ int POCSAG::GetMessageType()
 
 	if ((iNumScore < 50) && (iAlpScore < 50))	// Both less than 50% -> Bad decoded?
 	{
+		/* Prefer NUMERIC when digits were assembled — do NOT prefer ALPHA here.
+		 * PagerCast numeric pads with spaces (low num score); forcing ALPHA
+		 * made those pages vanish / show as garbage. */
+		if (nnum > 0) return(TYPE_NUMERIC);
+		if (nalp > 0) return(TYPE_ALPHA);
 		return(0);								// Let's not display this message
 	}
 
@@ -505,9 +533,14 @@ int POCSAG::GetMessageType()
 void POCSAG::show_message()
 {
 	int i;
+	bool displayed = false;
 
 	if (!wordc) iType = TYPE_TONE_ONLY;		// If no MSG-words => Tone-Only
 	else        iType = GetMessageType();
+
+	/* Address-only with uncorrectable BCH is not a real tone page — skip it. */
+	if (iType == TYPE_TONE_ONLY && addr_errl > 2)
+		return;
 
 	if (iType & TYPE_ALPHA)
 	{
@@ -524,6 +557,7 @@ void POCSAG::show_message()
 		daily_stat [pocsag_baud_rate][STAT_ALPHA]++;
 
 		ShowMessage();
+		displayed = true;
 	}
 
 	if ((iType == TYPE_TONE_ONLY) || (iType & TYPE_NUMERIC))
@@ -542,6 +576,10 @@ void POCSAG::show_message()
 		{
 			display_show_str(&Pane1, "TONE ONLY");
 			ShowMessage();
+			displayed = true;
+			if (displayed && msg_bch_codewords > 0)
+				UpdateMessageRxStats(msg_bch_errors, msg_bch_codewords);
+			if (bDoubleDisplay) bDoubleDisplay=false;
 			return;
 		}
 
@@ -554,7 +592,11 @@ void POCSAG::show_message()
 		}
 
 		ShowMessage();
+		displayed = true;
 	}
+
+	if (displayed && msg_bch_codewords > 0)
+		UpdateMessageRxStats(msg_bch_errors, msg_bch_codewords);
 
 	if (bDoubleDisplay) bDoubleDisplay=false;
 }
@@ -571,4 +613,7 @@ void POCSAG::reset()	 // reset in preperation of next message
 	nnum  = 0;
 	wordc = 0;
 	bAddressWord = false;
+	addr_errl = 0;
+	msg_bch_errors = 0;
+	msg_bch_codewords = 0;
 }

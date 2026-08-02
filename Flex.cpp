@@ -21,7 +21,7 @@
 
 #include <windows.h>
 
-#include "Headers/pdw.h"
+#include "Headers/pdl.h"
 #include "Headers/sound_in.h"
 #include "Headers/misc.h"
 #include "Headers/helper_funcs.h"
@@ -1256,7 +1256,7 @@ void display_cfstatus(int cycle, int frame)
 
 	if (cycle == 15)
 	{
-		iCurrentCycle = 99;				// Sometimes PDW seems to display cycle "15", which
+		iCurrentCycle = 99;				// Sometimes PDL seems to display cycle "15", which
 		iCurrentFrame = 999;			// does not exist, so let's display 99/999
 
 		CountBiterrors(5);

@@ -1,8 +1,8 @@
-/* Minimal type definitions for PDW Linux build.
+/* Minimal type definitions for PDL Linux build.
  * Shared decoding code (decode, Pocsag, Flex, Misc, etc.) uses these types;
  * this header provides the same layout so it compiles without Windows. */
-#ifndef PDW_LINUX_TYPES_H
-#define PDW_LINUX_TYPES_H
+#ifndef PDL_LINUX_TYPES_H
+#define PDL_LINUX_TYPES_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -69,6 +69,14 @@ typedef struct {
 } LOGFONT;
 
 typedef DWORD COLORREF;
+#ifndef RGB
+#define RGB(r,g,b) ((COLORREF)(((BYTE)(r)|((WORD)((BYTE)(g))<<8))|(((DWORD)(BYTE)(b))<<16)))
+#endif
+#ifndef GetRValue
+#define GetRValue(rgb) ((BYTE)((rgb) & 0xFF))
+#define GetGValue(rgb) ((BYTE)(((rgb) >> 8) & 0xFF))
+#define GetBValue(rgb) ((BYTE)(((rgb) >> 16) & 0xFF))
+#endif
 
 typedef struct {
 	WORD wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute, wSecond, wMilliseconds;
@@ -122,11 +130,14 @@ typedef struct { DWORD lStructSize; HWND hwndOwner; void* hDevMode; void* hDevNa
 #define TIME_FORCE24HOURFORMAT 0x80
 
 static inline void ZeroMemory(void *p, size_t n) { memset(p, 0, n); }
+/* Function-like min/max macros break C++ std::min/max and WebKit/JSC headers. */
+#ifndef __cplusplus
 #ifndef max
 #define max(a,b) ((a)>(b)?(a):(b))
 #endif
 #ifndef min
 #define min(a,b) ((a)<(b)?(a):(b))
+#endif
 #endif
 
 /* Stub types for code that is #ifdef _WIN32 on Linux */

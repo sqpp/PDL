@@ -1,15 +1,16 @@
-# CMakeLists.txt — PDW Linux (native build only)
-# Pager Data Decoder: POCSAG, FLEX, ACARS, MOBITEX, ERMES
+# CMakeLists.txt — PDL (Pager Data Linux)
+# Native Linux pager decoder: POCSAG (active); FLEX / ACARS / MOBITEX / ERMES stubs
 
-cmake_minimum_required(VERSION 2.8)
-project(PDW CXX)
+cmake_minimum_required(VERSION 3.10)
+project(PDL CXX)
 
-set(PDW_VERSION_MAJOR 3)
-set(PDW_VERSION_MINOR 1)
-set(PDW_VERSION_MICRO 0)
+set(PDL_VERSION_MAJOR 3)
+set(PDL_VERSION_MINOR 1)
+set(PDL_VERSION_PATCH 0)
+set(PDL_VERSION "${PDL_VERSION_MAJOR}.${PDL_VERSION_MINOR}.${PDL_VERSION_PATCH}")
 
 if(NOT UNIX OR APPLE)
-  message(FATAL_ERROR "PDW-Linux is a Linux port only. This project does not build on Windows or macOS.")
+  message(FATAL_ERROR "PDL is a Linux port only. This project does not build on Windows or macOS.")
 endif()
 
 add_subdirectory(GFX)
@@ -31,8 +32,21 @@ if(NOT GTK3_FOUND)
     "  Debian/Ubuntu: sudo apt install libgtk-3-dev\n"
     "  Arch:          sudo pacman -S gtk3")
 endif()
+pkg_check_modules(CURL REQUIRED libcurl)
+pkg_check_modules(WEBKIT webkit2gtk-4.1)
+if(NOT WEBKIT_FOUND)
+  pkg_check_modules(WEBKIT webkit2gtk-4.0)
+endif()
+if(NOT WEBKIT_FOUND)
+  message(FATAL_ERROR "WebKitGTK (webkit2gtk-4.1 or 4.0) is required for the modern Web UI.\n"
+    "  Fedora/RHEL:   sudo dnf install webkit2gtk4.1-devel\n"
+    "  Debian/Ubuntu: sudo apt install libwebkit2gtk-4.1-dev\n"
+    "  Arch:          sudo pacman -S webkit2gtk-4.1")
+endif()
 
-set(PDW_LINUX_SRCS
+# Spectrum waterfall uses a cheap CPU FFT only (Vulkan path froze the GTK UI).
+
+set(PDL_LINUX_SRCS
   Flex.cpp
   Misc.cpp
   Pocsag.cpp
@@ -46,22 +60,40 @@ set(PDW_LINUX_SRCS
   utils/Debug.cpp
   utils/Ostype.cpp
   utils/binary.cpp
-  linux/rs232_stub.cpp
-  linux/smtp_stub.cpp
+  linux/rs232_linux.cpp
+  linux/hw_decode.cpp
+  linux/gpu_spectrum.cpp
+  linux/smtp_linux.cpp
   linux/init_linux.cpp
   linux/stubs_linux.cpp
-  linux/pdw_platform_linux.cpp
+  linux/settings_linux.cpp
+  linux/pdl_platform_linux.cpp
   linux/pocsag_decrypt.cpp
   linux/audio_alsa.cpp
   linux/audio_pulse.cpp
   linux/audio_playback.cpp
   linux/gui_gtk.cpp
+  linux/gui_web.cpp
+  linux/feature_dialogs.cpp
+  linux/pagercast_stream.cpp
   linux/main_linux.cpp
 )
 
-add_executable(pdw_linux ${PDW_LINUX_SRCS})
-target_compile_definitions(pdw_linux PRIVATE __linux__ PDW_LINUX_HAVE_GTK)
-target_include_directories(pdw_linux PRIVATE
+include(GNUInstallDirs)
+
+add_executable(pdl ${PDL_LINUX_SRCS})
+configure_file(
+  ${CMAKE_SOURCE_DIR}/linux/pdl_version.h.in
+  ${CMAKE_BINARY_DIR}/generated/pdl_version.h
+  @ONLY
+)
+target_compile_definitions(pdl PRIVATE
+  __linux__
+  PDL_LINUX_HAVE_GTK
+  "PDL_DATADIR=\"${CMAKE_INSTALL_FULL_DATADIR}/pdl\""
+)
+target_include_directories(pdl PRIVATE
+  ${CMAKE_BINARY_DIR}/generated
   ${CMAKE_SOURCE_DIR}
   ${CMAKE_SOURCE_DIR}/Headers
   ${CMAKE_SOURCE_DIR}/utils
@@ -69,8 +101,10 @@ target_include_directories(pdw_linux PRIVATE
   ${ALSA_INCLUDE_DIRS}
   ${PULSE_INCLUDE_DIRS}
   ${GTK3_INCLUDE_DIRS}
+  ${WEBKIT_INCLUDE_DIRS}
+  ${CURL_INCLUDE_DIRS}
 )
-target_link_libraries(pdw_linux
+target_link_libraries(pdl
   OpenSSL::SSL
   OpenSSL::Crypto
   ${ALSA_LIBRARIES}
@@ -78,4 +112,68 @@ target_link_libraries(pdw_linux
   ${PULSE_SIMPLE_LIBRARIES}
   pthread
   ${GTK3_LIBRARIES}
+  ${WEBKIT_LIBRARIES}
+  ${CURL_LIBRARIES}
+  m
 )
+
+# Ship webui + app icon next to the binary (dev builds)
+add_custom_command(TARGET pdl POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/webui
+    $<TARGET_FILE_DIR:pdl>/webui
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/GFX/pdl.ico
+    $<TARGET_FILE_DIR:pdl>/pdl.ico
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/GFX/pdl.png
+    $<TARGET_FILE_DIR:pdl>/pdl.png
+  COMMENT "Copying webui + icon next to pdl"
+)
+
+# Packaged layout: /usr/bin/pdl + /usr/share/pdl/webui
+install(TARGETS pdl RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/webui/
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/pdl/webui
+  FILES_MATCHING
+    PATTERN "*.html"
+    PATTERN "*.js"
+    PATTERN "*.css"
+    PATTERN "*.svg"
+    PATTERN "*.png"
+    PATTERN "*.ico"
+)
+install(FILES ${CMAKE_SOURCE_DIR}/packaging/pdl.desktop
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+# App icon: source of truth is GFX/pdl.ico; PNGs for freedesktop/hicolor
+install(FILES ${CMAKE_SOURCE_DIR}/GFX/pdl.ico
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/pixmaps)
+install(FILES ${CMAKE_SOURCE_DIR}/GFX/pdl.png
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/pixmaps)
+foreach(_isz 16 24 32 48 64 128 256)
+  install(FILES ${CMAKE_SOURCE_DIR}/packaging/icons/hicolor/${_isz}x${_isz}/apps/pdl.png
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${_isz}x${_isz}/apps)
+endforeach()
+
+# ---- CPack: .deb + .rpm (build on the target distro/arch) ----
+set(CPACK_PACKAGE_NAME "pdl")
+set(CPACK_PACKAGE_VENDOR "PDL")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Pager Data Linux — POCSAG pager decoder")
+set(CPACK_PACKAGE_VERSION "${PDL_VERSION}")
+set(CPACK_PACKAGE_CONTACT "pdl@localhost")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
+set(CPACK_GENERATOR "DEB;RPM")
+set(CPACK_PACKAGING_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
+
+set(CPACK_DEBIAN_PACKAGE_SECTION "hamradio")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS
+  "libgtk-3-0, libasound2, libpulse0, libcurl4, libssl3, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37")
+
+set(CPACK_RPM_PACKAGE_LICENSE "Custom")
+set(CPACK_RPM_PACKAGE_GROUP "Applications/Communications")
+set(CPACK_RPM_PACKAGE_REQUIRES
+  "gtk3, alsa-lib, pulseaudio-libs, libcurl, openssl-libs, webkit2gtk4.1")
+
+include(CPack)

@@ -1,9 +1,9 @@
 #define IDC_STATIC             -1
 
 #define IDD_ICON                    97
-#define PDWICON                     98
-#define PDWMENU                     99
-#define PDWACCEL                   100
+#define PDLICON                     98
+#define PDLMENU                     99
+#define PDLACCEL                   100
 
 #define ABOUTDLGBOX                101
 #define LOGFILEDLGBOX              102

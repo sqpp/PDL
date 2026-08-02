@@ -129,10 +129,10 @@ char *DeCrlf(char *szStr)
 	if(szTmp) {
 		while(*szTmp) {
 			if(*szTmp == '\n') {
-				*szTmp = '»' ;
+				*szTmp = 'ï¿½' ;
 			}
 			if(*szTmp == '\r') {
-				*szTmp = '»' ;
+				*szTmp = 'ï¿½' ;
 			}
 			szTmp++ ;
 		}
@@ -155,7 +155,9 @@ char *DeKroket(char *szData, char *szReturn)
 		if(AsciiToHex(&by, &szData[8], 2, 1)) {
 			if(AsciiToHex(&by1, &szData[14], 2, 1)) {
 				if(by1 >= 0x80) cal = 18 ;
-	            if(len = AsciiToHex(array, szData + cal, min(MAX_BINARY_STRING, strlen(szData) - cal), 1)) {
+	            size_t avail = strlen(szData) - cal;
+	            size_t take = avail < (size_t)MAX_BINARY_STRING ? avail : (size_t)MAX_BINARY_STRING;
+	            if(len = AsciiToHex(array, szData + cal, take, 1)) {
 	                pData = DeCrlf(Convert7BitsTo8Bits(array, len, by, bin)) ;
 	                strcpy(szReturn, pData) ;
 	                return(szReturn) ;		

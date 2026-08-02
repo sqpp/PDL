@@ -1,0 +1,37 @@
+#version 450
+/* Parallel DFT magnitudes for real input (imag=0). One work item per bin. */
+layout(local_size_x = 64) in;
+
+layout(std430, binding = 0) readonly buffer InBuf {
+	float real_in[];
+};
+
+layout(std430, binding = 1) writeonly buffer OutBuf {
+	float mag[];
+};
+
+layout(push_constant) uniform Push {
+	uint n;
+} pc;
+
+void main()
+{
+	uint k = gl_GlobalInvocationID.x;
+	uint half_n = pc.n >> 1;
+	if (k >= half_n)
+		return;
+
+	float sum_r = 0.0;
+	float sum_i = 0.0;
+	float inv_n = 1.0 / float(pc.n);
+	for (uint i = 0u; i < pc.n; i++) {
+		float angle = -6.283185307179586 * float(k) * float(i) * inv_n;
+		float c = cos(angle);
+		float s = sin(angle);
+		float x = real_in[i];
+		sum_r += x * c;
+		sum_i += x * s;
+	}
+	/* Scale so full-scale sine ≈ 0.5; UI remaps to 0..1. */
+	mag[k] = sqrt(sum_r * sum_r + sum_i * sum_i) * inv_n * 2.0;
+}

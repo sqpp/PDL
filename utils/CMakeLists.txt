@@ -2,8 +2,8 @@
 #
 # Build script for building with cmake (http://www.cmake.org)
 
-set( PDW_INCLUDES
-  ${PDW_INCLUDES}
+set( PDL_INCLUDES
+  ${PDL_INCLUDES}
   ${CMAKE_CURRENT_SOURCE_DIR}/OSTYPE.H
   ${CMAKE_CURRENT_SOURCE_DIR}/binary.h
   #${CMAKE_CURRENT_SOURCE_DIR}/debug.h
@@ -16,8 +16,8 @@ set( PDW_INCLUDES
   PARENT_SCOPE
 )
 
-set( PDW_SRCS
-  ${PDW_SRCS}
+set( PDL_SRCS
+  ${PDL_SRCS}
   ${CMAKE_CURRENT_SOURCE_DIR}/Debug.cpp
   #${CMAKE_CURRENT_SOURCE_DIR}/OSTYPE.C
   ${CMAKE_CURRENT_SOURCE_DIR}/Ostype.cpp

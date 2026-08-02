@@ -1,5 +1,5 @@
-#ifndef PDW_MISC_H
-#define PDW_MISC_H
+#ifndef PDL_MISC_H
+#define PDL_MISC_H
 
 #define MSG_CAPCODE		1
 #define MSG_TIME		2
@@ -9,6 +9,8 @@
 #define MSG_BITRATE		6
 #define MSG_MESSAGE		7
 #define MSG_MOBITEX		8
+/* Phone column (PagerCast mode) reuses the MSG_MOBITEX storage slot. */
+#define MSG_PHONE		MSG_MOBITEX
 
 #define FLEXGROUPMODE_LOGGING			0x02
 #define FLEXGROUPMODE_COMBINE			0x04
@@ -19,7 +21,7 @@ extern unsigned long int iSecondsElapsed;
 extern char Current_MSG[9][MAX_STR_LEN];	// PH: Buffer for all message items
 extern unsigned char message_buffer[MAX_STR_LEN+1];
 extern unsigned char mobitex_buffer[MAX_STR_LEN+1];
-extern BYTE messageitems_colors[7];			// buffer for message items colors
+extern BYTE messageitems_colors[9];			// buffer for message items colors
 
 // Extra Globals used by display_show_char().
 extern char *dsc_pchar;
@@ -48,8 +50,15 @@ void ActivateCommandFile();
 int  Check_4_Filtermatch();
 int  CompareMessage(int item, int mon_or_filt);
 char *MakeFilterLabel(char *szLabel, char *szCapcode, char *szNewLabel);
+/* Apply Address/Time/… layout; PagerCast mode inserts a Phone column. */
+void pdl_apply_message_column_layout(void);
 
 void CountBiterrors(int errors);
+void UpdateMessageRxStats(int bch_errors, int codewords);
+extern bool bRX_Quality_Valid;
+extern double dRX_MessageQuality;
+extern int iRX_LastBchErrors;
+extern int iRX_LastBchCodewords;
 //void Update_RX_Quality();
 void InvertData(void);
 

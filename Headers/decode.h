@@ -1,5 +1,5 @@
-#ifndef PDW_DECODE_H
-#define PDW_DECODE_H
+#ifndef PDL_DECODE_H
+#define PDL_DECODE_H
 
 extern FILE *pd_raw_fp;
 extern FILTER filter;
@@ -56,10 +56,10 @@ extern FILE *pd_rec;
 
 //********* Prototypes. ****************************
 void pd_reset_all(void);
-void pdw_decode_acars(void);
-void pdw_decode_mobitex(void);
-void pdw_decode_ermes(void);
-void pdw_decode(void);
+void pdl_decode_acars(void);
+void pdl_decode_mobitex(void);
+void pdl_decode_ermes(void);
+void pdl_decode(void);
 void check_save_data(void);
 
 // RAH: record and playback
@@ -68,7 +68,7 @@ bool Start_Playback(LPTSTR lpstrFile);
 void Stop_Playback(void);
 void Start_Recording(LPTSTR lpstrFile);
 void Stop_Recording(void);
-void pdw_playback(void);
-void pdw_record(void);
+void pdl_playback(void);
+void pdl_record(void);
 
 #endif

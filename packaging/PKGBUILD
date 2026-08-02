@@ -1,0 +1,33 @@
+# Maintainer: you <you@example.com>
+# Point url/source at your repo, then: cd packaging && makepkg -si
+# For a local tree (no tag yet): makepkg -si -p PKGBUILD.local
+
+pkgname=pdl
+pkgver=3.1.0
+pkgrel=1
+pkgdesc="Pager Data Linux — POCSAG pager decoder with optional PagerCast stream"
+arch=('x86_64' 'aarch64')
+url="https://github.com/YOUR_USER/PDL"
+license=('custom')
+depends=(
+  'gtk3'
+  'webkit2gtk-4.1'
+  'alsa-lib'
+  'libpulse'
+  'curl'
+  'openssl'
+)
+makedepends=('cmake' 'pkgconf' 'gcc')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/YOUR_USER/PDL/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cmake -S "${srcdir}/PDL-${pkgver}" -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build -j"$(nproc)"
+}
+
+package() {
+  DESTDIR="${pkgdir}" cmake --install build
+}

@@ -1,3 +1,13 @@
+#ifndef RS232_H
+#define RS232_H
+
+#ifndef EXTERN_C
+#ifdef __cplusplus
+#define EXTERN_C extern "C"
+#else
+#define EXTERN_C
+#endif
+#endif
 
 #define CBR_SLICER_2K			CBR_110  // 100
 #define CBR_SLICER_XP			CBR_300  // 200
@@ -10,8 +20,6 @@
 #define DRIVER_TYPE_NOT_LOADED	0
 #define DRIVER_TYPE_SLICER		1
 #define DRIVER_TYPE_RS232		2
-
-
 
 EXTERN_C int rs232_connect(SLICER_IN_STR *pInSlicer, SLICER_OUT_STR *pOutSlicer);
 EXTERN_C int rs232_transmit_data(unsigned char buffer[], int nBytes);
@@ -26,5 +34,8 @@ EXTERN_C int WriteComPort(char *szLine) ;
 EXTERN_C int CloseComPort(void) ;
 
 EXTERN_C int *FindComPorts(void) ;
+EXTERN_C const char *GetComPortPath(int one_based_index);
 
 EXTERN_C int GetRs232DriverType(void) ;
+
+#endif /* RS232_H */

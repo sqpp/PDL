@@ -6,7 +6,7 @@
 
 #include <windows.h>
 #include <stdio.h>
-#include "Headers/pdw.h"
+#include "Headers/pdl.h"
 #include "smtp_int.h"
 #include "smtp.h"
 #include "debug.h"

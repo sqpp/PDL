@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=PDL
+GenericName=Pager Data Linux
+Comment=POCSAG pager decoder for Linux
+Exec=pdl
+Icon=pdl
+Terminal=false
+Categories=AudioVideo;HamRadio;Network;
+Keywords=pager;pocsag;decoder;pagercast;
+StartupNotify=true
+StartupWMClass=pdl

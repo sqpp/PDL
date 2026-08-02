@@ -3,7 +3,7 @@
 #include "Headers/SLICER.H"
 #include "debug.h"
 #include "OSTYPE.H"
-#include "Headers/pdw.h"
+#include "Headers/pdl.h"
 #include "rs232.h"
 
 #define SLICER_BUFSIZE 10000
@@ -311,7 +311,7 @@ int slicer_read(void)
 #define _COMPORT_3		2
 #define _COMPORT_4		3
 
-// Variables to put into pdw.ini
+// Variables to put into pdl.ini
 int nComPort2 =  _COMPORT_1;
 HANDLE m_ComPortHandle2 = INVALID_HANDLE_VALUE;
 BOOL m_bConnectedToComport2 = FALSE;

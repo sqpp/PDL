@@ -19,13 +19,13 @@ class html
 {
 	private:
 	
-	#ifdef PDW_HTML_SET_COMPILE
+	#ifdef PDL_HTML_SET_COMPILE
 	public:
 	#endif
 
 	std::vector<std::string>	Lines;
 
-	#ifdef PDW_HTML_SET_COMPILE
+	#ifdef PDL_HTML_SET_COMPILE
 	private:
 	#endif
 		unsigned long	MaxLines;

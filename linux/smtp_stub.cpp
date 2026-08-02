@@ -1,7 +1,7 @@
 /* Stub implementation of SMTP API for native Linux build.
  * Mail is not sent; MailInit and SendMail no-op. */
 
-#include "platform/pdw_linux_types.h"
+#include "platform/pdl_linux_types.h"
 #include "utils/smtp.h"
 #include <stddef.h>
 

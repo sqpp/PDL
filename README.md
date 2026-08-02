@@ -1,60 +1,62 @@
-# PDW-Linux
+# PDL — Pager Data Linux
 
-Native Linux port of **PDW** (Pager Data Decoder), supporting POCSAG, FLEX, ACARS, MOBITEX, and ERMES. GTK3 GUI, ALSA/PulseAudio capture.
+Native Linux pager decoder. **POCSAG** is the supported decoder; FLEX, ACARS, MOBITEX, and ERMES are present in the codebase but disabled until verified. GTK3 GUI (classic) or WebKit UI, ALSA/PulseAudio capture, optional PagerCast stream integration.
+
+## Version
+
+`PDL <major.minor.patch> (Linux · POCSAG)` — set in CMake (`PDL_VERSION`).
 
 ## Requirements
 
-- CMake ≥ 2.8  
-- C++ compiler  
-- OpenSSL  
-- ALSA (libasound2-dev)  
-- PulseAudio (libpulse-dev)  
+- CMake ≥ 3.10
+- C++ compiler
+- OpenSSL
+- ALSA (libasound2-dev)
+- PulseAudio (libpulse-dev)
 - GTK3 (gtk+-3.0)
+- WebKitGTK (webkit2gtk-4.1 or 4.0)
+- libcurl
 
 ### Install dependencies
 
 **Fedora / RHEL**
 ```bash
-sudo dnf install cmake gcc-c++ openssl-devel alsa-lib-devel libpulse-devel gtk3-devel
+sudo dnf install cmake gcc-c++ openssl-devel alsa-lib-devel libpulse-devel gtk3-devel webkit2gtk4.1-devel libcurl-devel
 ```
 
 **Debian / Ubuntu**
 ```bash
-sudo apt install cmake g++ libssl-dev libasound2-dev libpulse-dev libgtk-3-dev
+sudo apt install cmake g++ libssl-dev libasound2-dev libpulse-dev libgtk-3-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev
 ```
 
 **Arch**
 ```bash
-sudo pacman -S cmake gcc openssl alsa-lib libpulse gtk3
+sudo pacman -S cmake gcc openssl alsa-lib libpulse gtk3 webkit2gtk-4.1 curl
 ```
 
 ## Build
 
 ```bash
-mkdir build && cd build
+mkdir -p build && cd build
 cmake ..
-make
-./pdw_linux
+cmake --build . -j$(nproc)
 ```
 
-## Usage
+Binary: `./build/pdl`
 
-- **`pdw_linux`** — start with default audio device.  
-- **`pdw_linux -v`** or **`pdw_linux --verbose`** — verbose logging (decoded lines, mode, UI actions).  
-- **`pdw_linux -v 2`** or **`pdw_linux --verbose full`** — include display pipeline debug.  
-- **File → Exit** — quit. **Interface → Setup/Volume** — select audio input. **Options** — decoding options (POCSAG/FLEX/MOBITEX/ACARS). **Display → Clear Screen** — clear panes.
+## Settings
 
-### POCSAG encrypted messages 
-
-Messages encrypted with AES-256-CTR, Base64 are decrypted automatically if you set the key:
+Settings are stored in `pdl.ini`.
 
 ```bash
-export PDW_POCSAG_DECRYPT_KEY="your-secret-key"
-./pdw_linux
+export PDL_POCSAG_DECRYPT_KEY="your-secret-key"
 ```
 
-Same key and format as used when encoding with `pocsag --encrypt --key "your-secret-key"`. If decryption fails (wrong key or unencrypted message), the raw message is shown.
+## Packages
+
+See [`packaging/README.md`](packaging/README.md).
 
 ## License
 
-Same as the original PDW project.
+Same as the upstream Discriminator project where applicable.
+

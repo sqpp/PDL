@@ -1,5 +1,5 @@
-#ifndef PDW_ERMES_H
-#define PDW_ERMES_H
+#ifndef PDL_ERMES_H
+#define PDL_ERMES_H
 
 class ERMES
 {

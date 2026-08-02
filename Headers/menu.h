@@ -1,5 +1,5 @@
-#ifndef PDW_MENU_CTRL_H
-#define PDW_MENU_CTRL_H
+#ifndef PDL_MENU_CTRL_H
+#define PDL_MENU_CTRL_H
 
 
 void check_menu_item(int submenu_no,UINT item_id,BOOL item_checked);

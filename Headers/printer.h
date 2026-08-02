@@ -1,5 +1,5 @@
-#ifndef PDW_PRINTER_H
-#define PDW_PRINTER_H
+#ifndef PDL_PRINTER_H
+#define PDL_PRINTER_H
 
 // printer.h
 

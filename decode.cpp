@@ -2,7 +2,7 @@
 //
 // Serial port decoding routines.
 //
-// pdw_decode():
+// pdl_decode():
 //
 //   - Decides which functions to call for decoding:
 //     POCSAG/FLEX/ACARS/MOBITEX or ERMES signals.
@@ -15,7 +15,7 @@
 
 #include <windows.h>
 
-#include "Headers/pdw.h"
+#include "Headers/pdl.h"
 #include "Headers/initapp.h"
 #include "Headers/sigind.h"
 #include "Headers/decode.h"
@@ -183,7 +183,7 @@ bool Start_Playback(LPTSTR lpstrFile)
 
 	if ((pRecording = fopen(lpstrFile,"rb")) == NULL)	// read
 	{
-		MessageBox(NULL,"Error opening playback file.","PDW",MB_ICONWARNING);
+		MessageBox(NULL,"Error opening playback file.","PDL",MB_ICONWARNING);
 		bPlayback = false;
 	}
 	else
@@ -214,7 +214,7 @@ void Stop_Playback(void)
 }
 
 // RAH: Handle playback of recording
-void pdw_playback(void)
+void pdl_playback(void)
 {
 	BOOL bMore = TRUE;
 	BOOL bAnything = FALSE;
@@ -236,7 +236,7 @@ void pdw_playback(void)
 	}
 	if (bAnything)
 	{
-		pdw_decode();
+		pdl_decode();
 	}
 	else // Done
 	{
@@ -256,10 +256,10 @@ void Start_Recording(LPTSTR lpstrFile)
 
 	if ((pRecording = fopen(lpstrFile,"ab")) == NULL)	// append
     {
-		MessageBox(NULL,"Error opening output file for recording.","PDW",MB_ICONWARNING);
+		MessageBox(NULL,"Error opening output file for recording.","PDL",MB_ICONWARNING);
 		bRecording = false;
         // HWi 
-		SetWindowText(ghWnd, (LPSTR) pdw_version);
+		SetWindowText(ghWnd, (LPSTR) pdl_version);
     }
     else
     {
@@ -278,7 +278,7 @@ void Stop_Recording(void)
 		fclose(pRecording);
 		pRecording = NULL;
 	}
-	SetWindowText(ghWnd, (LPSTR) pdw_version);
+	SetWindowText(ghWnd, (LPSTR) pdl_version);
 }
 
 // RAH: Select a file for recording
@@ -289,7 +289,11 @@ BOOL Open_Recording(OPENFILENAME *pofn, LPTSTR lpstrFile, bool bOpennotsave)
 	char szExt[] = ".rec";
 	char szInitialDir[MAX_PATH];
 
+#ifdef __linux__
+	sprintf(szInitialDir, "%s/Recordings", szPath);
+#else
 	sprintf(szInitialDir, "%s\\Recordings", szPath);
+#endif
 	strcpy(szTitle, bOpennotsave ? "Playback Recording" : "Start Recording");
 
 	pofn->lStructSize		= sizeof(OPENFILENAME);
@@ -306,7 +310,7 @@ BOOL Open_Recording(OPENFILENAME *pofn, LPTSTR lpstrFile, bool bOpennotsave)
 	return(GetOpenFileName(pofn));
 }
 
-void pdw_decode_acars(void)
+void pdl_decode_acars(void)
 {
 	if (pd_i != *cpstn)
 	{
@@ -361,7 +365,7 @@ void pdw_decode_acars(void)
 }
 
 
-void pdw_decode_mobitex(void)
+void pdl_decode_mobitex(void)
 {
 	if (mb.timer)				// Check if dropped out of mobitex mode.
 	{
@@ -414,7 +418,7 @@ void pdw_decode_mobitex(void)
 }
 
 
-void pdw_decode_ermes(void)
+void pdl_decode_ermes(void)
 { 
 	if (em.timer)				// Check if dropped out of ermes mode.
 	{
@@ -468,7 +472,7 @@ void pdw_decode_ermes(void)
 
 
 // Decode POCSAG/FLEX/ACARS/MOBITEX/ERMES.....
-void pdw_decode(void)
+void pdl_decode(void)
 {
 	if (bRecording)	// Hwi Added for recording function
 	{
@@ -491,17 +495,17 @@ void pdw_decode(void)
 
 	if (Profile.monitor_mobitex)	// Decoding Mobitex..
 	{
-		pdw_decode_mobitex();
+		pdl_decode_mobitex();
 		return;
 	}
 	if (Profile.monitor_ermes)		// Decoding Ermes..
 	{
-		pdw_decode_ermes();
+		pdl_decode_ermes();
 		return;   
 	}    
 	if (Profile.monitor_acars)		// Decoding ACARS..
 	{
-		pdw_decode_acars();
+		pdl_decode_acars();
 		return;
 	}
 
@@ -707,9 +711,17 @@ void check_save_data(void)
 				if (Profile.stat_file_use_date)
 				{
 					CreateDateFilename(".st", bDaily ? &prev_statTime : NULL);
+#ifdef __linux__
+					sprintf(filename, "%s/%s", szLogPathName, szFilenameDate);
+#else
 					sprintf(filename, "%s\\%s", szLogPathName, szFilenameDate);
+#endif
 				}
+#ifdef __linux__
+				else sprintf(filename, "%s/%s.st", szLogPathName, Profile.stat_file);
+#else
 				else sprintf(filename, "%s\\%s.st", szLogPathName, Profile.stat_file);
+#endif
 
 				if ((pStatFile = fopen(filename, "a")) != NULL)
 				{

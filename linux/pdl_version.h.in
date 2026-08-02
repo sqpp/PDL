@@ -1,0 +1,7 @@
+#ifndef PDL_VERSION_H
+#define PDL_VERSION_H
+
+#define PDL_VERSION "@PDL_VERSION@"
+#define PDL_VERSION_STRING "PDL @PDL_VERSION@ (Linux · POCSAG)"
+
+#endif

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDL</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div class="shell">
+    <!-- LEFT NAV (mockup 3) -->
+    <aside class="rail">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 12c3-6 7-6 10 0s7 6 10 0"/>
+            <path d="M6 12c2-3 4-3 6 0s4 3 6 0"/>
+            <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
+        <span>PDL</span>
+      </div>
+
+      <nav class="rail-nav">
+        <button type="button" class="rail-item active" data-panel="messages">
+          <span class="ico">◈</span> Messages
+        </button>
+        <button type="button" class="rail-item" data-cmd="dialog" data-name="filters">
+          <span class="ico">⚑</span> Alerts
+        </button>
+        <button type="button" class="rail-item" data-cmd="dialog" data-name="audio">
+          <span class="ico">▤</span> Devices
+        </button>
+        <button type="button" class="rail-item" data-cmd="dialog" data-name="stats">
+          <span class="ico">▦</span> Analytics
+        </button>
+        <button type="button" class="rail-item" data-panel="settings">
+          <span class="ico">⚙</span> Settings
+        </button>
+      </nav>
+
+      <div class="rail-foot">
+        <div class="decoder-card">
+          <div class="row"><span class="dot" id="pc-dot"></span> <span id="pc-pill-label">Offline</span></div>
+          <div class="muted" id="nav-mode">Decoder</div>
+          <div class="device" id="nav-input">—</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER: message cards -->
+    <section class="center" id="panel-messages">
+      <header class="center-head">
+        <div>
+          <h1>Messages</h1>
+          <p>Real-time decoded pager messages.</p>
+        </div>
+        <div class="head-actions">
+          <button type="button" class="chip" data-cmd="dialog" data-name="filters">Filter</button>
+          <button type="button" class="chip" data-cmd="clear" data-pane="0">Clear</button>
+          <div class="src-tabs" id="pc-src-tabs" role="tablist" aria-label="Input source" hidden>
+            <button type="button" role="tab" class="stab active" id="tab-src-local" data-src="local" aria-selected="true">Local</button>
+            <button type="button" role="tab" class="stab" id="tab-src-pc" data-src="pagercast" aria-selected="false">PagerCast</button>
+          </div>
+          <button type="button" class="chip icon" id="btn-more" title="More">⋯</button>
+        </div>
+      </header>
+
+      <div class="feed-tabs" role="tablist" aria-label="Message panes">
+        <button type="button" role="tab" class="ftab active" data-pane="1" aria-selected="true">Monitored</button>
+        <button type="button" role="tab" class="ftab" data-pane="2" aria-selected="false">Filtered</button>
+      </div>
+
+      <div class="feed" id="feed-1"></div>
+      <div class="feed hidden" id="feed-2"></div>
+
+      <footer class="center-foot">
+        <span class="recv" id="footer-status"><span class="pulse"></span> Ready</span>
+        <span id="footer-count">0 messages</span>
+      </footer>
+    </section>
+
+    <!-- RIGHT: settings (mockup 3) -->
+    <aside class="settings" id="panel-settings">
+      <header class="settings-head">
+        <h1>Settings</h1>
+        <p>Configure decoding and integrations.</p>
+      </header>
+
+      <div class="settings-body">
+        <nav class="settings-nav" role="tablist" aria-label="Settings sections">
+          <button type="button" role="tab" class="snav active" data-sec="general" aria-selected="true">General</button>
+          <button type="button" role="tab" class="snav" data-sec="decoder" aria-selected="false">Decoder</button>
+          <button type="button" role="tab" class="snav" data-sec="integrations" aria-selected="false">Integrations</button>
+          <button type="button" role="tab" class="snav" data-sec="appearance" aria-selected="false">Appearance</button>
+          <button type="button" role="tab" class="snav" data-sec="advanced" aria-selected="false">Advanced</button>
+        </nav>
+
+        <div class="settings-main">
+          <section class="sec active" id="sec-general">
+            <h2>Application</h2>
+            <label class="field"><span>Application name</span><input type="text" value="PDL" readonly /></label>
+            <label class="toggle"><input type="checkbox" id="tray" /><span>Minimize to tray</span></label>
+            <label class="field"><span>Theme</span>
+              <select id="theme" disabled><option>Dark</option></select>
+            </label>
+          </section>
+
+          <section class="sec" id="sec-decoder">
+            <h2>Decoder</h2>
+            <label class="field"><span>Audio input</span><input id="capture" type="text" placeholder="default" /></label>
+            <div class="signal-block">
+              <div class="signal-bar"><div class="fill" id="signal-fill"></div></div>
+              <div class="signal-meta"><span id="signal-val">0%</span> · <span id="signal-hint">Waiting for audio</span></div>
+            </div>
+            <div class="signal-block">
+              <div class="signal-bar quality"><div class="fill" id="quality-fill"></div></div>
+              <div class="signal-meta"><span id="quality-val">0%</span> decode · <span id="bch-val">BCH —</span></div>
+            </div>
+            <button type="button" class="btn ghost" data-cmd="dialog" data-name="audio">Open Audio Setup…</button>
+            <button type="button" class="btn ghost" data-cmd="dialog" data-name="options">POCSAG / Decode Options…</button>
+          </section>
+
+          <section class="sec" id="sec-integrations" role="tabpanel">
+            <h2>Integrations</h2>
+            <div class="integ-card">
+              <h3>PagerCast</h3>
+              <label class="toggle"><input type="checkbox" id="pc-enable" /><span>Enable PagerCast</span></label>
+              <label class="field"><span>Node / API base</span><input id="api-base" type="text" placeholder="https://…" /></label>
+              <label class="field"><span>Nodes</span><select id="nodes"></select></label>
+              <label class="field"><span>Frequency (MHz)</span><input id="frequency" type="text" placeholder="154.600" /></label>
+              <label class="field"><span>API key</span><input id="api-key" type="password" placeholder="pcat_…" /></label>
+              <label class="field"><span>Host suffix</span><input id="host-suffix" type="text" placeholder="pagercast.com" /></label>
+              <div class="btn-row">
+                <button type="button" class="btn ghost" id="btn-pc-refresh">Refresh nodes</button>
+                <button type="button" class="btn primary" id="btn-pc-connect">Connect</button>
+                <button type="button" class="btn ghost" id="btn-pc-disconnect">Disconnect</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="sec" id="sec-appearance">
+            <h2>Appearance</h2>
+            <label class="field"><span>UI mode</span>
+              <select id="ui-mode">
+                <option value="gtk">Classic GTK</option>
+                <option value="web">Modern Web UI</option>
+              </select>
+            </label>
+            <p class="hint">Changing UI mode restarts the app.</p>
+            <button type="button" class="btn primary" id="btn-apply-ui">Apply &amp; restart</button>
+          </section>
+
+          <section class="sec" id="sec-advanced">
+            <h2>Advanced</h2>
+            <p class="hint">Opens the full classic dialogs for deep configuration.</p>
+            <div class="btn-row wrap">
+              <button type="button" class="btn ghost" data-cmd="dialog" data-name="options">Options…</button>
+              <button type="button" class="btn ghost" data-cmd="dialog" data-name="filters">Filters…</button>
+              <button type="button" class="btn ghost" data-cmd="dialog" data-name="general">General…</button>
+              <button type="button" class="btn ghost" data-cmd="dialog" data-name="display">Display…</button>
+              <button type="button" class="btn ghost" data-cmd="dialog" data-name="colors">Colors…</button>
+              <button type="button" class="btn ghost" data-cmd="dialog" data-name="mail">Mail…</button>
+              <button type="button" class="btn ghost" data-cmd="dialog" data-name="stats">Statistics…</button>
+              <button type="button" class="btn ghost" data-cmd="dialog" data-name="about">About…</button>
+            </div>
+          </section>
+
+          <div class="settings-actions">
+            <button type="button" class="btn primary wide" id="btn-save">Save Settings</button>
+            <p class="autosave">Changes are saved to pdl.ini</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

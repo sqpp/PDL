@@ -25,7 +25,7 @@ extern int iMaxWidth;
 extern int sizeSet;
 extern int pane1Height, pane2Height, pane1Pos, pane2Pos, pane1Top;
 
-extern char gszPDWClass[15];
+extern char gszPDLClass[15];
 extern char gszPane1Class[17];
 extern char gszPane2Class[17];
 //extern char gszPane2LabelClass[22];
@@ -47,7 +47,7 @@ extern TCHAR szHelpPathName[MAX_PATH];  // full pathname of the application's he
 extern TCHAR szIniPathName[MAX_PATH];   // full pathname of the application's ini file
 extern TCHAR szFilterPathName[MAX_PATH];// full pathname of the application's filter file
 extern TCHAR szFilterBackup[MAX_PATH];  // full pathname of the application's filter backupfile
-extern TCHAR szVolPathName[MAX_PATH];   // full pathname to the PDW volume control.
+extern TCHAR szVolPathName[MAX_PATH];   // full pathname to the PDL volume control.
 
 // functions
 UINT GetPathFromFullPathName(LPCTSTR lpFullPathName, LPTSTR lpPathBuffer, UINT nPathBufferLength);

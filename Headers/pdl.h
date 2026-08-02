@@ -1,8 +1,8 @@
-#ifndef PDW_H
-#define PDW_H
+#ifndef PDL_H
+#define PDL_H
 
 #ifdef __linux__
-#include "platform/pdw_linux_types.h"
+#include "platform/pdl_linux_types.h"
 #include <cstdio>
 #endif
 
@@ -87,7 +87,7 @@ typedef struct
 #define COLOR_FILTERLABEL	20	// 21-36 are reserved for the filter label colors
 
 
-#define SYSTEMTRAY_ICON_MESSAGE (WM_USER+1) // ID for PDW sytem tray icon
+#define SYSTEMTRAY_ICON_MESSAGE (WM_USER+1) // ID for PDL sytem tray icon
 
 #include <cstring>
 
@@ -133,7 +133,7 @@ typedef struct
 	int  LabelNewline;				// Labels on new line
 	char ColLogfile[10];			// Flag for columns to be logged in logfile
 	char ColFilterfile[10];			// Flag for columns to be logged in filterfile
-	int  Linefeed;					// Flag for converting ¯ to linefeed
+	int  Linefeed;					// Flag for converting ï¿½ to linefeed
 	int  Separator;					// Flag for separating messages (empty line)
 	int  MonthNumber;				// Flag for using monthnumber in logfilenames
 	int  DateFormat;				// Flag for date format
@@ -211,7 +211,7 @@ typedef struct
 	int pane1_size;
 	int pane2_size;
 	int ScrollSpeed;
-	int ScreenColumns[7];
+	int ScreenColumns[8];
 
 	int  stat_file_enabled;
 	int  stat_file_use_date;
@@ -237,7 +237,21 @@ typedef struct
 	int lang_mi_index;          // Decides language menu item.
 	int lang_tbl_index;         // Decides language character map.
 	bool ssl;
+
+	/* PagerCast radio stream (Linux). */
+	int  pagercast_enabled;
+	int  pagercast_subscriber_id;
+	char pagercast_api_base[256];
+	char pagercast_frequency[32];
+	char pagercast_api_key[256];
+	char pagercast_host_suffix[64];
+
+	/* Linux UI: 0 = classic GTK (default), 1 = modern WebKit UI. */
+	int  ui_mode;
 } PROFILE, *PPROFILE;
+
+#define PDL_UI_GTK  0
+#define PDL_UI_WEB  1
 
 extern PROFILE Profile;     // profile information
 
@@ -316,6 +330,9 @@ class POCSAG
 				bool bAddressWord; // Will be set if last word was an address flag
 				int  alp[MAX_STR_LEN], num[40];
 				int  function;
+				int  addr_errl; /* BCH error count for the current address word */
+				int  msg_bch_errors;    /* BCH errors in current message (addr + body) */
+				int  msg_bch_codewords; /* codewords counted for current message */
 
 				void show_addr(bool bAlpha);
 				void show_message();
@@ -339,7 +356,7 @@ extern PaneStruct *select_pane;
 
 extern char *label_colors[9]; // PH: Colors for filter labels
 extern char *wave_files[11];
-extern char *pdw_version;
+extern char *pdl_version;
 
 extern char aNumeric[17];
 
@@ -376,7 +393,7 @@ int  filter_addr(char addr_str[], char filter_str[]);
 
 // Windows function prototypes...
 
-LRESULT FAR PASCAL PDWWndProc  (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT FAR PASCAL PDLWndProc  (HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT FAR PASCAL Pane1WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT FAR PASCAL Pane2WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -432,6 +449,7 @@ BOOL GetPrivateProfileSettings(LPCTSTR lpszAppTitle, LPCTSTR lpszIniPathName, PP
 void WriteSettings();
 void WriteFilters(PPROFILE pProfile, int backup);
 bool ReadFilters(char *szFilters, PPROFILE pProfile, bool bNew);
+void UpdateFilters(void);
 
 bool LoadDriver(void);
 void UnloadDriver(void);

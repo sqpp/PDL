@@ -7,7 +7,7 @@
 #endif
 
 #include <windows.h>
-#include "Headers/pdw.h"
+#include "Headers/pdl.h"
 #include "Headers/initapp.h"
 #include "Headers/gfx.h"
 #include "Headers/decode.h"
@@ -21,13 +21,95 @@
 #include <cctype>
 #endif
 #ifdef __linux__
-#include "platform/pdw_platform.h"
+#include "platform/pdl_platform.h"
 #include "linux/pocsag_decrypt.h"
+#include "linux/pagercast_stream.h"
 #endif
 
 #define FILTER_PARAM_LEN	500
 #define MAXIMUM_GROUPSIZE	1000
 #define CAPCODES_INDEX		0
+
+/*
+ * PagerCast embeds the sender phone in the alpha payload:
+ *   "+17777770100: hello"   or   "17777770100: hello"   or   "hello +17777770100"
+ * Used only in PagerCast input mode (Phone column). Returns 1 if a phone was
+ * stripped into phone_out (always with a leading '+').
+ */
+static int is_phonedigit(unsigned char c)
+{
+	return c >= '0' && c <= '9';
+}
+
+static int extract_embedded_phone(char *msg, char *phone_out, size_t phone_len)
+{
+	if (!msg || !msg[0] || !phone_out || phone_len < 4)
+		return 0;
+	phone_out[0] = '\0';
+
+	/* --- prefix: [+]digits[:|\s] --- */
+	{
+		char *p = msg;
+		while (*p == ' ' || *p == '\t') p++;
+		int has_plus = (*p == '+') ? 1 : 0;
+		char *d = p + has_plus;
+		int n = 0;
+		while (is_phonedigit((unsigned char)d[n])) n++;
+		if (n >= 8 && n <= 15) {
+			char after = d[n];
+			if (after == '\0' || after == ':' || after == ' ' || after == '\t') {
+				if (phone_len > (size_t)(n + 2)) {
+					phone_out[0] = '+';
+					memcpy(phone_out + 1, d, (size_t)n);
+					phone_out[n + 1] = '\0';
+				}
+				char *rest = d + n;
+				if (*rest == ':') rest++;
+				while (*rest == ' ' || *rest == '\t') rest++;
+				if (rest != msg)
+					memmove(msg, rest, strlen(rest) + 1);
+				return 1;
+			}
+		}
+	}
+
+	/* --- suffix: [\s|:][+]digits --- */
+	{
+		int len = (int)strlen(msg);
+		int end = len;
+		while (end > 0 && (msg[end - 1] == ' ' || msg[end - 1] == '\t'))
+			end--;
+		int dig_end = end;
+		int dig_start = end;
+		while (dig_start > 0 && is_phonedigit((unsigned char)msg[dig_start - 1]))
+			dig_start--;
+		int n = dig_end - dig_start;
+		if (n >= 8 && n <= 15) {
+			int pos = dig_start;
+			int has_plus = 0;
+			if (pos > 0 && msg[pos - 1] == '+') {
+				has_plus = 1;
+				pos--;
+			}
+			/* Require a separator before the phone (or start of string). */
+			if (pos == 0 || msg[pos - 1] == ' ' || msg[pos - 1] == '\t' || msg[pos - 1] == ':') {
+				if (phone_len > (size_t)(n + 2)) {
+					phone_out[0] = '+';
+					memcpy(phone_out + 1, msg + dig_start, (size_t)n);
+					phone_out[n + 1] = '\0';
+				}
+				int cut = pos;
+				if (cut > 0 && (msg[cut - 1] == ':' || msg[cut - 1] == ' ' || msg[cut - 1] == '\t'))
+					cut--;
+				while (cut > 0 && (msg[cut - 1] == ' ' || msg[cut - 1] == '\t'))
+					cut--;
+				msg[cut] = '\0';
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
 
 #define MAX_SEPFILES		32
 
@@ -102,7 +184,7 @@ extern char szWindowText[6][1000];
 extern char szFilenameDate[16];				// PH: Global buffer for date as filename
 
 BYTE message_color[MAX_STR_LEN+1];			// buffer for filter colors
-BYTE messageitems_colors[7];				// buffer for message items colors
+BYTE messageitems_colors[9];				// buffer for message items colors
 unsigned char message_buffer[MAX_STR_LEN+1];// buffer for message characters
 unsigned char mobitex_buffer[MAX_STR_LEN+1];// buffer for mobitex characters
 unsigned char rev_msg_buffer[MAX_STR_LEN+1];// required for logfile output
@@ -316,7 +398,7 @@ void display_line(PaneStruct *pane)
 #ifdef __linux__
 	/* Only flush and request GUI refresh when line has content (skip empty-line flushes from LINEFEED). */
 	if (pane->currentPos > 0)
-		pdw_platform_flush_line(&pchar[pane->Bottom * (LINE_SIZE+1)]);
+		pdl_platform_flush_line(&pchar[pane->Bottom * (LINE_SIZE+1)]);
 #endif
 
 	pane->currentPos = 0;
@@ -600,6 +682,56 @@ void Remove_MissedGroupcall(int groupbit)
 	CountBiterrors(10);
 }
 
+/*
+ * Column layout for the monospace message line.
+ * Normal:  Address Time Date Mode Type Bitrate Message
+ * PagerCast input mode only: insert Phone after Address (MSG_PHONE slot).
+ */
+void pdl_apply_message_column_layout(void)
+{
+	int pc = 0;
+#ifdef __linux__
+	/* Layout follows the active input mode (Local vs PagerCast), not Enable. */
+	pc = pdl_pagercast_is_wanted() ? 1 : 0;
+#endif
+	if (pc) {
+		iItemPositions[MSG_CAPCODE]  = 1;
+		iItemPositions[MSG_PHONE]    = 11;
+		iItemPositions[MSG_TIME]     = 26;
+		iItemPositions[MSG_DATE]     = 35;
+		iItemPositions[MSG_MODE]     = 44;
+		iItemPositions[MSG_TYPE]     = 53;
+		iItemPositions[MSG_BITRATE]  = 61;
+		iItemPositions[MSG_MESSAGE]  = 69;
+		Profile.ScreenColumns[0] = MSG_CAPCODE;
+		Profile.ScreenColumns[1] = MSG_PHONE;
+		Profile.ScreenColumns[2] = MSG_TIME;
+		Profile.ScreenColumns[3] = MSG_DATE;
+		Profile.ScreenColumns[4] = MSG_MODE;
+		Profile.ScreenColumns[5] = MSG_TYPE;
+		Profile.ScreenColumns[6] = MSG_BITRATE;
+		Profile.ScreenColumns[7] = MSG_MESSAGE;
+		messageitems_colors[MSG_PHONE] = COLOR_ADDRESS;
+	} else {
+		iItemPositions[MSG_CAPCODE]  = 1;
+		iItemPositions[MSG_TIME]     = 11;
+		iItemPositions[MSG_DATE]     = 20;
+		iItemPositions[MSG_MODE]     = 29;
+		iItemPositions[MSG_TYPE]     = 38;
+		iItemPositions[MSG_BITRATE]  = 46;
+		iItemPositions[MSG_MESSAGE]  = 54;
+		iItemPositions[MSG_PHONE]    = 0;
+		Profile.ScreenColumns[0] = MSG_CAPCODE;
+		Profile.ScreenColumns[1] = MSG_TIME;
+		Profile.ScreenColumns[2] = MSG_DATE;
+		Profile.ScreenColumns[3] = MSG_MODE;
+		Profile.ScreenColumns[4] = MSG_TYPE;
+		Profile.ScreenColumns[5] = MSG_BITRATE;
+		Profile.ScreenColumns[6] = MSG_MESSAGE;
+		Profile.ScreenColumns[7] = 0;
+	}
+}
+
 
 void ShowMessage()
 {
@@ -661,12 +793,35 @@ void ShowMessage()
 #ifdef __linux__
 	/* Try pocsag-golang compatible decryption for POCSAG messages */
 	{
-		const char *key = pdw_platform_pocsag_decrypt_key();
+		const char *key = pdl_platform_pocsag_decrypt_key();
 		if (key && strstr(Current_MSG[MSG_MODE], "POCSAG") && Current_MSG[MSG_MESSAGE][0]) {
 			char decrypted[MAX_STR_LEN];
 			if (pocsag_try_decrypt(Current_MSG[MSG_MESSAGE], decrypted, sizeof(decrypted), key)) {
 				memcpy(Current_MSG[MSG_MESSAGE], decrypted, MAX_STR_LEN);
 				Current_MSG[MSG_MESSAGE][MAX_STR_LEN - 1] = '\0';
+			}
+		}
+	}
+#endif
+
+	/* PagerCast air format: Phone column only while PagerCast input is active. */
+#ifdef __linux__
+	if (pdl_pagercast_is_wanted() && !Profile.monitor_mobitex) {
+		char phone[32];
+		Current_MSG[MSG_PHONE][0] = '\0';
+		if (extract_embedded_phone(Current_MSG[MSG_MESSAGE], phone, sizeof(phone))) {
+			strncpy(Current_MSG[MSG_PHONE], phone, MAX_STR_LEN - 1);
+			Current_MSG[MSG_PHONE][MAX_STR_LEN - 1] = '\0';
+			messageitems_colors[MSG_PHONE] = COLOR_ADDRESS;
+			strncpy((char *)message_buffer, Current_MSG[MSG_MESSAGE], MAX_STR_LEN - 1);
+			message_buffer[MAX_STR_LEN - 1] = 0;
+			{
+				int mlen = (int)strlen(Current_MSG[MSG_MESSAGE]);
+				int i;
+				for (i = 0; i < mlen && i < MAX_STR_LEN; i++)
+					message_color[i] = COLOR_MESSAGE;
+				if (mlen < MAX_STR_LEN)
+					message_color[mlen] = COLOR_UNUSED;
 			}
 		}
 	}
@@ -724,7 +879,12 @@ void ShowMessage()
 			else
 			{
 				bFILTERED=true;
+#ifdef __linux__
+				/* Single-pane Mockup-1 UI: keep filter hits in the main list. */
+				bMONITOR = true;
+#else
 				if (Profile.filterwindowonly) bMONITOR=false;	// Don't display filtered messages in monitor pane
+#endif
 			}
 
 			if (Profile.filters[iMatch].reject)
@@ -848,11 +1008,16 @@ void ShowMessage()
 			}
 			else if (pane == FILTER)
 			{
+#ifdef __linux__
+				/* No separate filter pane — hits are highlighted in Pane1. */
+				break;
+#else
 				if (!bFILTERED || bCombine) break;
 				else
 				{
 					pPane = &Pane2;		// Show message in Pane2
 				}
+#endif
 			}
 
 			if (Profile.Separator || Profile.FlexGroupMode)
@@ -909,7 +1074,7 @@ void ShowMessage()
 			display_show_strV2(pPane, " ");
 
 			// Display&log message
-			for (i=0; i<7; i++)
+			for (i=0; i<8; i++)
 			{
 				if (Profile.ScreenColumns[i] == 0) break;
 
@@ -1038,15 +1203,20 @@ void ShowMessage()
 						}
 						else
 						{
+							/* Classic PDL inserted a leading space for 7-digit
+							 * addresses to roughly match 9-digit width. That just
+							 * looks like a stray blank before the capcode (almost
+							 * all POCSAG/PagerCast traffic is 7 digits). */
+#ifndef __linux__
 							if (strlen(Current_MSG[MSG_CAPCODE]) == 7)
 							{
-								display_show_strV2(pPane, " ");	// Add extra space if 7 digit code
+								display_show_strV2(pPane, " ");
 							}
+#endif
 							if (bFILTERED && (iAddrMatch != -1))
 							{
-								// did capcode iMatch (with text iMatch)?
-								// change color of temp_str capcode to filter iMatch color...
-								display_color(&Pane2, COLOR_FILTERMATCH);
+								/* Green capcode for address filter hits (classic PDL). */
+								display_color(pPane, COLOR_FILTERMATCH);
 							}
 						}
 					}
@@ -1081,11 +1251,15 @@ void ShowMessage()
 				}
 				else if (pane == FILTER)
 				{
+#ifdef __linux__
+					break;
+#else
 					if (!bFILTERED) break;
 					else
 					{
 						pPane = &Pane2;		// Show message in Pane2
 					}
+#endif
 				}
 				memcpy(Previous_MSG[pane], Current_MSG, (MAX_STR_LEN * 9));
 
@@ -1122,27 +1296,38 @@ void ShowMessage()
 
 			dwColor = (COLOR_FILTERLABEL+Profile.filters[iMatch].label_color);
 
-			if (bMONITOR && (bMONITOR_ONLY || Profile.LabelLog))
+			if (bMONITOR && (bMONITOR_ONLY || Profile.LabelLog
+#ifdef __linux__
+				|| bFILTERED
+#endif
+				))
 			{
 				if (Pane1.currentPos > iItemPositions[MSG_MESSAGE]) display_line(&Pane1);
 			}
+#ifndef __linux__
 			if (bFILTERED)
 			{
 				if (Pane2.currentPos > iItemPositions[MSG_MESSAGE]) display_line(&Pane2);
 			}
+#endif
 
 			memset(szLabelspacing, 0, sizeof(szLabelspacing));
 			memset(szLabelspacing, ' ', iItemPositions[MSG_MESSAGE]-iPanePos);
 
 			sprintf(szCurrentLabel[1], "- %s -", szCurrentLabel[0]);	// Create "- label -" for logfiles
 
-			if (bMONITOR_ONLY)
+			if (bMONITOR_ONLY
+#ifdef __linux__
+				|| (bFILTERED && bMONITOR)
+#endif
+				)
 			{
 				// PH: Get/show label in monitor pane
 				display_show_strV2(&Pane1, szLabelspacing);		// First, show the correct # of spaces
 				display_color(&Pane1, dwColor);
 				display_show_strV2(&Pane1, szCurrentLabel[0]);	// Show monitorlabel in Pane1
 			}
+#ifndef __linux__
 			else if (bFILTERED)
 			{
 				// PH: Get/show filterlabel in filter pane
@@ -1158,12 +1343,15 @@ void ShowMessage()
 					display_show_strV2(&Pane1, szCurrentLabel[0]);	// Show filterlabel in Pane1
 				}
 			}
+#endif
 		}	// end of filter label
 
 		if (iPanePos)
 		{
 			if (bMONITOR)  display_line(&Pane1);		// Ensure last line is displayed.
+#ifndef __linux__
 			if (bFILTERED) display_line(&Pane2);		// Ensure last line is displayed.
+#endif
 		}
 
 		if (bMATCH && Profile.filter_cmd_file_enabled) // Activate commandfile, if enabled
@@ -2108,7 +2296,7 @@ void ActivateCommandFile()
 	CloseHandle(pif.hProcess);
 	CloseHandle(pif.hThread);
 
-//	MessageBox(ghWnd, szCommandFile, "PDW Commandfile", MB_ICONINFORMATION);
+//	MessageBox(ghWnd, szCommandFile, "PDL Commandfile", MB_ICONINFORMATION);
 }
 
 
@@ -2260,7 +2448,7 @@ void display_showmo(int mode)
 		}
 	}
 #ifdef __linux__
-	pdw_platform_show_mode(mode);
+	pdl_platform_show_mode(mode);
 #else
 	SetNewWindowText("");
 #endif
@@ -2713,6 +2901,7 @@ void WriteStatFileDaily(FILE *fp)
 void CountBiterrors(int errors)
 {
 	extern double dRX_Quality;
+	extern bool bRX_Quality_Valid;
 	static int nErrors=5, nErrorChecks=100, noerrors=0, count=0;
 
 	if (errors)
@@ -2741,6 +2930,39 @@ void CountBiterrors(int errors)
 		noerrors=0;
 	}
 	dRX_Quality = 100 - ((double)(nErrors*100)/nErrorChecks);
+	if (dRX_Quality < 0.0) dRX_Quality = 0.0;
+	if (dRX_Quality > 100.0) dRX_Quality = 100.0;
+	bRX_Quality_Valid = true;
+}
+
+/* Rolling RX % from displayed POCSAG messages only (address + body codewords). */
+double dRX_MessageQuality = -1.0;
+int iRX_LastBchErrors = 0;
+int iRX_LastBchCodewords = 0;
+bool bRX_MessageQuality_Valid = false;
+
+void UpdateMessageRxStats(int bch_errors, int codewords)
+{
+	static int win_errors = 0, win_codewords = 0;
+
+	if (codewords <= 0)
+		return;
+
+	iRX_LastBchErrors = bch_errors;
+	iRX_LastBchCodewords = codewords;
+
+	win_errors += bch_errors;
+	win_codewords += codewords;
+	if (win_codewords > 64) {
+		win_errors = (win_errors + 1) / 2;
+		win_codewords = (win_codewords + 1) / 2;
+	}
+
+	double q = 100.0 - ((double)win_errors * 100.0 / (double)win_codewords);
+	if (q < 0.0) q = 0.0;
+	if (q > 100.0) q = 100.0;
+	dRX_MessageQuality = q;
+	bRX_MessageQuality_Valid = true;
 }
 
 

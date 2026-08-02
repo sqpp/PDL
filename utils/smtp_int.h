@@ -33,8 +33,8 @@ int	sockPuts(SOCKET sock,char *str);
 
 #define MFL __FILE__,__LINE__
 
-#define MAILSEND_VERSION	"pdwmail 1.0 http://www.hwithaar.com/"
-#define MAILSEND_PROG		"pdwmail"
+#define MAILSEND_VERSION	"pdlmail 1.0 http://www.hwithaar.com/"
+#define MAILSEND_PROG		"pdlmail"
 #define MAILSEND_AUTHOR 	"withaarh@hwithaar.com"
 #define MAILSEND_URL		"http://www.hwithaar.com/"
 

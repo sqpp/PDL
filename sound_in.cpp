@@ -16,11 +16,14 @@
 #include <windows.h>
 
 #include "Headers/Resource.h"
-#include "Headers/pdw.h"
+#include "Headers/pdl.h"
 #include "Headers/initapp.h"
 #include "Headers/sigind.h"
 #include "Headers/decode.h"
 #include "Headers/sound_in.h"
+#ifdef __linux__
+#include "linux/gpu_spectrum.h"
+#endif
 #include "Headers/acars.h"
 #include "Headers/mobitex.h"
 #include "Headers/ermes.h"
@@ -109,9 +112,31 @@ void Debug_BIT_MSG(char *msg_bit);
 extern bool bMode_IDLE;
 
 #ifdef __linux__
-// Linux: feed audio buffer from ALSA into the decoder (same logic as Process_ReadyBuffers body).
-void pdw_linux_feed_audio(char *lpAudioBuffer, long LenAudioBuffer)
+/* While PagerCast owns the decoder input, ignore local Pulse/ALSA samples. */
+static volatile int s_feed_pagercast_only = 0;
+static volatile int s_feed_from_pagercast = 0;
+
+void pdl_linux_set_pagercast_audio_exclusive(int enable)
 {
+	s_feed_pagercast_only = enable ? 1 : 0;
+}
+
+void pdl_linux_feed_audio_from_pagercast(char *lpAudioBuffer, long LenAudioBuffer)
+{
+	s_feed_from_pagercast = 1;
+	pdl_linux_feed_audio(lpAudioBuffer, LenAudioBuffer);
+	s_feed_from_pagercast = 0;
+}
+
+// Linux: feed audio buffer from ALSA into the decoder (same logic as Process_ReadyBuffers body).
+void pdl_linux_feed_audio(char *lpAudioBuffer, long LenAudioBuffer)
+{
+	if (s_feed_pagercast_only && !s_feed_from_pagercast)
+		return;
+#ifdef __linux__
+	if (lpAudioBuffer && LenAudioBuffer > 0)
+		pdl_gpu_spectrum_push_u8((const unsigned char *)lpAudioBuffer, (int)LenAudioBuffer);
+#endif
 	if (flex_timer) {
 		bMode_IDLE = false;
 		flex_timer--;
@@ -122,11 +147,15 @@ void pdw_linux_feed_audio(char *lpAudioBuffer, long LenAudioBuffer)
 	} else if (mb.timer) {
 		mb.timer--;
 		if (mb.timer == 0) display_showmo(MODE_IDLE);
+	} else if (em.timer) {
+		em.timer--;
+		if (em.timer == 0) display_showmo(MODE_IDLE);
 	}
 	check_save_data();
 	if (Profile.monitor_paging) Audio_To_Bits(lpAudioBuffer, LenAudioBuffer);
 	else if (Profile.monitor_acars) ACARS_To_Bits(lpAudioBuffer, LenAudioBuffer);
 	else if (Profile.monitor_mobitex) MOBITEX_To_Bits(lpAudioBuffer, LenAudioBuffer);
+	else if (Profile.monitor_ermes) ERMES_To_Bits(lpAudioBuffer, LenAudioBuffer);
 }
 #endif
 
@@ -186,7 +215,11 @@ BOOL Start_Capturing(void)
 		}
 
 		lstrcpy(szDialogErrorMsg, TEXT(msg));
-		MessageBox(ghWnd, msg, "PDW Soundcard",MB_ICONERROR);
+#ifdef __linux__
+		MessageBox(ghWnd, msg, "PDL Soundcard", MB_ICONERROR);
+#else
+		MessageBox(ghWnd, msg, "PDL Soundcard",MB_ICONERROR);
+#endif
 
 		return(FALSE);
 	}
@@ -242,7 +275,7 @@ BOOL Start_Capturing(void)
 	return(FALSE);
 #else
 	(void)0;
-	return FALSE;  // Linux uses ALSA + pdw_linux_feed_audio
+	return FALSE;  // Linux uses ALSA + pdl_linux_feed_audio
 #endif
 }
 
@@ -388,6 +421,13 @@ void Reset_ATB(void)
 		BaudRate = mb.bitrate;
 		last_baud_rate = mb.bitrate;
 	}
+	else if (Profile.monitor_ermes)
+	{
+		clkt_hi = FINE_CLKT_HI;
+		clkt_lo = FINE_CLKT_LO;
+		BaudRate = 6250;
+		last_baud_rate = 6250;
+	}
 	else
 	{
 		clkt_hi = FINE_CLKT_HI;
@@ -504,7 +544,7 @@ void Audio_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 				if ((nSamples > 28) && (nSamples < 44)) preamble_count[INDEX1200]++;
 				else									preamble_count[INDEX1200]=0;
 
-				if (preamble_count[INDEX1200] > 50)	// Found  1200 POCSAG?
+				if (preamble_count[INDEX1200] > 30)	// Found  1200 POCSAG?
 				{
 					preamble_count[INDEX1200]=0;
 					if (Profile.pocsag_1200)
@@ -622,7 +662,8 @@ void Audio_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 				if (pocbit == 0)	// If pocbit==0, end of pocsag signal.
 				{
 					display_showmo(MODE_IDLE);
-					pocsag.frame('X');      // Reset pocsag routine.
+					/* Must be -1 (flush pending page). 'X' was treated as a data bit. */
+					pocsag.frame(-1);
 					BaudRate = 1600;        // Allow flex sync-ups again.
 					config_index=INDEX1600;
 				}
@@ -799,7 +840,6 @@ void ACARS_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 	} // endof main "for" loop.
 }
 
-/*
 void ERMES_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 {
 	atb_sig_cnt = 0;
@@ -809,7 +849,7 @@ void ERMES_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 	{
 		// If this is the first time being called or if the baudrate rate has changed
 		// since the last time we were called recalculate WatchStep.
-		if (BaudRate != last_baud_rate) 
+		if (BaudRate != last_baud_rate)
 		{
 			// WatchStep is how often to check for bit in buffer
 			WatchStep = (long double) Profile.audioSampleRate / (long double) BaudRate;
@@ -842,7 +882,7 @@ void ERMES_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 		// Resync on 0/1 and 1/0 crossings.
 		// Only resync if last sample count was equal to a single 1/0 bit.
 		if ((atb_value < -1) && (atb_bit == high_audio))
-		{    
+		{
 			atb_bit = low_audio;
 
 			if (((atb_len < WatchStep * 2) &&
@@ -858,7 +898,7 @@ void ERMES_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 			atb_bit = high_audio;
 			atb_len=0;
 		}
-      
+
 		// Get sample value and process it if on WatchStep
 		if (WatchCtr - atb_ctr < 1 && WatchCtr != -1)
 		{
@@ -869,7 +909,6 @@ void ERMES_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 	} // endof main "for" loop.
 	WatchCtr = WatchCtr - (double)LenAudioBuffer;
 }
-*/
 
 // Sets the correct audio input configuration based on users selection from Interface dialog.
 void SetAudioConfig(int sac_type)
@@ -917,7 +956,7 @@ void SetAudioConfig(int sac_type)
 		atb_threshold[INDEX2400] = 16;
 		atb_threshold[INDEX3200] = 6;
 
-		pre_threshold = 11;
+		pre_threshold = 6;
 		break;
 
 		case 2:       // Discriminator 2
@@ -1050,4 +1089,8 @@ void SetAudioConfig(int sac_type)
 		pre_threshold = 8;
 		break;
 	}
+
+	/* Apply saved polarity (was only toggled live via InvertData() before). */
+	low_audio  = Profile.invert ? DEFAULT_HI_AUDIO : DEFAULT_LO_AUDIO;
+	high_audio = Profile.invert ? DEFAULT_LO_AUDIO : DEFAULT_HI_AUDIO;
 }

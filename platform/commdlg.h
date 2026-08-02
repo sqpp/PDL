@@ -1,4 +1,4 @@
-#ifndef PDW_COMMDLG_H
-#define PDW_COMMDLG_H
-#include "pdw_linux_types.h"
+#ifndef PDL_COMMDLG_H
+#define PDL_COMMDLG_H
+#include "pdl_linux_types.h"
 #endif

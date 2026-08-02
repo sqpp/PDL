@@ -1,11 +1,11 @@
 /*
- * ALSA capture for PDW Linux. Captures 8-bit mono at Profile.audioSampleRate
- * and feeds buffers to pdw_linux_feed_audio (→ Audio_To_Bits).
+ * ALSA capture for PDL Linux. Captures 8-bit mono at Profile.audioSampleRate
+ * and feeds buffers to pdl_linux_feed_audio (→ Audio_To_Bits).
  */
 #ifdef __linux__
-#include "platform/pdw_linux_types.h"
+#include "platform/pdl_linux_types.h"
 #include "Headers/sound_in.h"
-#include "Headers/pdw.h"
+#include "Headers/pdl.h"
 #include "Headers/decode.h"
 #include <alsa/asoundlib.h>
 #include <stdio.h>
@@ -38,14 +38,14 @@ static int is_real_device(const char *name, const char *desc)
 	return 1;
 }
 
-void pdw_linux_alsa_enumerate_capture(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx)
+void pdl_linux_alsa_enumerate_capture(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx)
 {
 	if (!cb) return;
 	/* List ALL Pulse sources then ALL sinks (no state filter). Same as system Sound panel. */
-	pdw_linux_pulse_enumerate_capture(cb, ctx);
+	pdl_linux_pulse_enumerate_capture(cb, ctx);
 }
 
-void pdw_linux_alsa_enumerate_playback(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx)
+void pdl_linux_alsa_enumerate_playback(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx)
 {
 	void **hints = NULL;
 	if (snd_device_name_hint(-1, "pcm", &hints) < 0) return;
@@ -64,7 +64,7 @@ void pdw_linux_alsa_enumerate_playback(void (*cb)(const char *name, const char *
 	snd_device_name_free_hint(hints);
 }
 
-int pdw_linux_alsa_open(const char *device, unsigned int sample_rate)
+int pdl_linux_alsa_open(const char *device, unsigned int sample_rate)
 {
 	const char *dev = (device && device[0]) ? device : "default";
 
@@ -80,7 +80,8 @@ int pdw_linux_alsa_open(const char *device, unsigned int sample_rate)
 		snd_pcm_hw_params_set_access(g_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
 		snd_pcm_hw_params_set_format(g_handle, hw_params, SND_PCM_FORMAT_U8);
 		snd_pcm_hw_params_set_channels(g_handle, hw_params, 1);
-		unsigned int sr = sample_rate;
+		unsigned int requested = sample_rate;
+		unsigned int sr = requested;
 		snd_pcm_hw_params_set_rate_near(g_handle, hw_params, &sr, 0);
 		/* Small period = frequent POLLIN so the level meter updates often (audio‑reactive). */
 		snd_pcm_uframes_t period_frames = 256;
@@ -93,22 +94,29 @@ int pdw_linux_alsa_open(const char *device, unsigned int sample_rate)
 			g_handle = NULL;
 			return -1;
 		}
+		/* Read back negotiated rate — decoder timing depends on Profile.audioSampleRate. */
+		if (snd_pcm_hw_params_get_rate(hw_params, &sr, 0) == 0) {
+			if (sr != requested)
+				fprintf(stderr, "ALSA: requested %u Hz, negotiated %u Hz\n", requested, sr);
+			Profile.audioSampleRate = (int)sr;
+		}
+		g_running = 1;
 		return 0;
 	}
-	return pdw_linux_pulse_open(dev, sample_rate);
+	return pdl_linux_pulse_open(dev, sample_rate);
 }
 
-void pdw_linux_alsa_stop(void)
+void pdl_linux_alsa_stop(void)
 {
 	g_running = 0;
-	pdw_linux_pulse_stop();
+	pdl_linux_pulse_stop();
 }
 
-void pdw_linux_alsa_close(void)
+void pdl_linux_alsa_close(void)
 {
 	g_running = 0;
-	if (pdw_linux_pulse_is_open())
-		pdw_linux_pulse_close();
+	if (pdl_linux_pulse_is_open())
+		pdl_linux_pulse_close();
 	if (g_handle) {
 		snd_pcm_drop(g_handle);
 		snd_pcm_close(g_handle);
@@ -118,17 +126,17 @@ void pdw_linux_alsa_close(void)
 
 #define ALSA_BUF_SIZE 512   /* small so level meter updates often (~10–60 ms) and feels audio‑reactive */
 
-int pdw_linux_alsa_run(void)
+int pdl_linux_alsa_run(void)
 {
-	if (pdw_linux_pulse_is_open())
-		return pdw_linux_pulse_run();
+	if (pdl_linux_pulse_is_open())
+		return pdl_linux_pulse_run();
 	if (!g_handle) return -1;
 	char *buf = (char*)malloc(ALSA_BUF_SIZE);
 	if (!buf) return -1;
 	Reset_ATB();
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
-	fprintf(stderr, "PDW Linux: capturing from ALSA device (Ctrl+C to stop)\n");
+	fprintf(stderr, "PDL: capturing from ALSA device (Ctrl+C to stop)\n");
 	unsigned int nfds = snd_pcm_poll_descriptors_count(g_handle);
 	struct pollfd *pfds = (struct pollfd *)malloc(sizeof(struct pollfd) * nfds);
 	if (!pfds) { free(buf); return -1; }
@@ -149,7 +157,7 @@ int pdw_linux_alsa_run(void)
 				if (d > peak) peak = d;
 			}
 			g_input_level = (peak * 100.0) / 128.0;
-			pdw_linux_feed_audio(buf, (long)n);
+			pdl_linux_feed_audio(buf, (long)n);
 		} else {
 			g_input_level = 0.0;
 		}
@@ -165,10 +173,14 @@ int pdw_linux_alsa_run(void)
 	return 0;
 }
 
-double pdw_linux_get_input_level(void)
+double pdl_linux_get_input_level(void)
 {
-	if (pdw_linux_pulse_is_open())
-		return pdw_linux_pulse_get_input_level();
+	extern int pdl_pagercast_is_connected(void);
+	extern double pdl_pagercast_get_input_level(void);
+	if (pdl_pagercast_is_connected())
+		return pdl_pagercast_get_input_level();
+	if (pdl_linux_pulse_is_open())
+		return pdl_linux_pulse_get_input_level();
 	return g_input_level;
 }
 

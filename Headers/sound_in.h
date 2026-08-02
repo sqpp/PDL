@@ -32,21 +32,23 @@ void SetAudioConfig(int sac_type);
 int Get_Percent(int x,int percent);
 
 #ifdef __linux__
-void pdw_linux_feed_audio(char *lpAudioBuffer, long LenAudioBuffer);
-int pdw_linux_alsa_open(const char *device, unsigned int sample_rate);
-void pdw_linux_alsa_stop(void);
-void pdw_linux_alsa_enumerate_capture(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx);
-void pdw_linux_alsa_enumerate_playback(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx);
-int pdw_linux_play_wav(const char *wav_path, const char *alsa_device);
-double pdw_linux_get_input_level(void);  /* 0..100, raw input level for UI indicator */
+void pdl_linux_feed_audio(char *lpAudioBuffer, long LenAudioBuffer);
+void pdl_linux_feed_audio_from_pagercast(char *lpAudioBuffer, long LenAudioBuffer);
+void pdl_linux_set_pagercast_audio_exclusive(int enable);
+int pdl_linux_alsa_open(const char *device, unsigned int sample_rate);
+void pdl_linux_alsa_stop(void);
+void pdl_linux_alsa_enumerate_capture(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx);
+void pdl_linux_alsa_enumerate_playback(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx);
+int pdl_linux_play_wav(const char *wav_path, const char *alsa_device);
+double pdl_linux_get_input_level(void);  /* 0..100, raw input level for UI indicator */
 /* PulseAudio: list all devices (no state filter), capture from named source */
-void pdw_linux_pulse_enumerate_capture(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx);
-int pdw_linux_pulse_open(const char *device, unsigned int sample_rate);
-void pdw_linux_pulse_close(void);
-void pdw_linux_pulse_stop(void);
-int pdw_linux_pulse_run(void);
-double pdw_linux_pulse_get_input_level(void);
-int pdw_linux_pulse_is_open(void);
+void pdl_linux_pulse_enumerate_capture(void (*cb)(const char *name, const char *desc, void *ctx), void *ctx);
+int pdl_linux_pulse_open(const char *device, unsigned int sample_rate);
+void pdl_linux_pulse_close(void);
+void pdl_linux_pulse_stop(void);
+int pdl_linux_pulse_run(void);
+double pdl_linux_pulse_get_input_level(void);
+int pdl_linux_pulse_is_open(void);
 #endif
 
 #endif

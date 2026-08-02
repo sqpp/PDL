@@ -1,10 +1,10 @@
 /*
- * ALSA WAV playback for PDW Linux. Plays WAV file to the selected output device
+ * ALSA WAV playback for PDL Linux. Plays WAV file to the selected output device
  * (used by sndPlaySound from stubs_linux).
  */
 #ifdef __linux__
-#include "platform/pdw_linux_types.h"
-#include "Headers/pdw.h"
+#include "platform/pdl_linux_types.h"
+#include "Headers/pdl.h"
 #include "Headers/sound_in.h"
 #include <alsa/asoundlib.h>
 #include <stdint.h>
@@ -81,7 +81,7 @@ static void *play_wav_thread(void *arg)
 	return NULL;
 }
 
-int pdw_linux_play_wav(const char *wav_path, const char *alsa_device)
+int pdl_linux_play_wav(const char *wav_path, const char *alsa_device)
 {
 	if (!wav_path || !wav_path[0]) return 0;
 	play_args_t *a = (play_args_t *)malloc(sizeof(play_args_t));

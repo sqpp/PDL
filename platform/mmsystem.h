@@ -1,6 +1,6 @@
-#ifndef PDW_MMSYSTEM_H
-#define PDW_MMSYSTEM_H
-#include "pdw_linux_types.h"
+#ifndef PDL_MMSYSTEM_H
+#define PDL_MMSYSTEM_H
+#include "pdl_linux_types.h"
 #define WAVE_FORMAT_PCM 1
 #define WAVE_MAPPER 0
 #define CALLBACK_FUNCTION 0x30000

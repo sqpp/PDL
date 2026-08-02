@@ -3,7 +3,7 @@ build/
 build_linux/
 *.o
 *.a
-pdw_linux
+pdl_linux
 
 # IDE / editor
 .vs/

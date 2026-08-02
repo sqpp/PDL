@@ -1,5 +1,5 @@
-#ifndef PDW_GFX_H
-#define PDW_GFX_H
+#ifndef PDL_GFX_H
+#define PDL_GFX_H
 
 #define TITLE_BAR_SIZE   18   // Size of pane1/pane2 title bars.
 #define DIVIDER_OFFSET   12
@@ -49,7 +49,7 @@ extern HBRUSH  hbr;
 extern HBRUSH  hboxbr;
 extern HFONT   hfont;
 extern HFONT   hboxfont;
-extern HFONT   pdw_font[FONT_COUNT];
+extern HFONT   pdl_font[FONT_COUNT];
 extern LOGFONT boxfontInfo;
 
 extern HPEN   null_pen;     // Stock Object - General purpose
@@ -63,7 +63,7 @@ extern int NewLinePoint;
 extern int PL1_SCount;
 extern int PL2_SCount;
 
-extern int iItemPositions[8];
+extern int iItemPositions[9];
 extern int iItemWidths[7];
 
 // Functions

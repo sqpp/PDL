@@ -2,8 +2,8 @@
 #
 # Build script for building with cmake (http://www.cmake.org)
 
-set( PDW_INCLUDES
-  ${PDW_INCLUDES}
+set( PDL_INCLUDES
+  ${PDL_INCLUDES}
   ${CMAKE_CURRENT_SOURCE_DIR}/Resource.h
   ${CMAKE_CURRENT_SOURCE_DIR}/SLICER.H
   ${CMAKE_CURRENT_SOURCE_DIR}/acars.h
@@ -17,7 +17,7 @@ set( PDW_INCLUDES
   ${CMAKE_CURRENT_SOURCE_DIR}/menu.h
   ${CMAKE_CURRENT_SOURCE_DIR}/misc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/mobitex.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/pdw.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/pdl.h
   ${CMAKE_CURRENT_SOURCE_DIR}/printer.h
   ${CMAKE_CURRENT_SOURCE_DIR}/sigind.h
   ${CMAKE_CURRENT_SOURCE_DIR}/sound_in.h

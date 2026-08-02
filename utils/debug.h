@@ -1,5 +1,5 @@
-#ifndef PDW_DEBUG_H
-#define PDW_DEBUG_H
+#ifndef PDL_DEBUG_H
+#define PDL_DEBUG_H
 
 extern int	nDebugOutput ;
 extern int	nDebugNum ;

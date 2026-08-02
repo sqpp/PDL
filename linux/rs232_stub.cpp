@@ -1,7 +1,7 @@
 /* Stub implementation of rs232/slicer API for native Linux build.
  * Serial/slicer hardware is not used; all functions no-op or return "not present". */
 
-#include "platform/pdw_linux_types.h"
+#include "platform/pdl_linux_types.h"
 #include "Headers/SLICER.H"
 #ifndef EXTERN_C
 #ifdef __cplusplus
@@ -82,6 +82,12 @@ int *FindComPorts(void)
 {
 	s_comPortsArr[0] = 0;
 	return s_comPortsArr;
+}
+
+const char *GetComPortPath(int one_based_index)
+{
+	(void)one_based_index;
+	return NULL;
 }
 
 int GetRs232DriverType(void)
