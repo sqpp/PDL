@@ -45,10 +45,24 @@ int MessageBox(void *hWnd, const char *text, const char *caption, UINT type)
 {
 	(void)type;
 	if (gtk_init_check(NULL, NULL)) {
-		GtkWidget *d = gtk_message_dialog_new(hWnd ? GTK_WINDOW(hWnd) : NULL,
-			GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
-			"%s", text ? text : "");
-		if (caption) gtk_window_set_title(GTK_WINDOW(d), caption);
+		GtkWindow *parent = hWnd ? GTK_WINDOW(hWnd) : NULL;
+		GtkWidget *d = gtk_dialog_new_with_buttons(
+			caption && caption[0] ? caption : "PDL",
+			parent,
+			(GtkDialogFlags)(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+			"OK", GTK_RESPONSE_ACCEPT, NULL);
+		pdl_linux_gui_prepare_dialog(d);
+		if (parent)
+			gtk_window_set_transient_for(GTK_WINDOW(d), parent);
+		GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(d));
+		gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+		GtkWidget *lab = gtk_label_new(text ? text : "");
+		gtk_label_set_selectable(GTK_LABEL(lab), TRUE);
+		gtk_widget_set_halign(lab, GTK_ALIGN_START);
+		gtk_label_set_xalign(GTK_LABEL(lab), 0.0f);
+		gtk_label_set_line_wrap(GTK_LABEL(lab), TRUE);
+		gtk_box_pack_start(GTK_BOX(content), lab, TRUE, TRUE, 0);
+		gtk_widget_show_all(d);
 		gtk_dialog_run(GTK_DIALOG(d));
 		gtk_widget_destroy(d);
 		return 1;
@@ -160,12 +174,14 @@ int nCount_Messages = 0;
 int nCount_Groupcalls = 0;
 int nCount_Rejected = 0;
 int nCount_Blocked = 0;
+int nCount_CleanRx = 0;   /* displayed msgs with acceptable BCH */
+int nCount_CorruptRx = 0; /* displayed msgs with high BCH errors */
 int nCount_Missed[2] = { 0, 0 };
 int nCount_BlockBuffer[2] = { 0, 0 };
 bool bTrayed = false;
 char szFilenameDate[16] = { 0 };
 #ifndef PDL_VERSION_STRING
-#define PDL_VERSION_STRING "PDL (Linux · POCSAG)"
+#define PDL_VERSION_STRING "PDL"
 #endif
 char *pdl_version = (char *)PDL_VERSION_STRING;
 

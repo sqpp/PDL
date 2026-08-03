@@ -19,6 +19,7 @@
 #include <pthread.h>
 #include <curl/curl.h>
 #include <unistd.h>
+#include <stdint.h>
 
 extern void pdl_linux_init_panes(void);
 extern int pdl_linux_alsa_open(const char *device, unsigned int sample_rate);
@@ -183,20 +184,29 @@ int main(int argc, char **argv)
 	s_saved_argv = argv;
 
 	const char *log_path = NULL;
+	const char *decode_file = NULL;
 	int cli_ui = -1;
+	int force_invert = -1; /* -1=ini/auto, 0=off, 1=on */
 
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
 			log_path = argv[++i];
+		} else if ((strcmp(argv[i], "--file") == 0 || strcmp(argv[i], "-f") == 0) && i + 1 < argc) {
+			decode_file = argv[++i];
+		} else if (strcmp(argv[i], "--invert") == 0) {
+			force_invert = 1;
+		} else if (strcmp(argv[i], "--no-invert") == 0) {
+			force_invert = 0;
 		} else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
 			printf("PDL " PDL_VERSION " — Linux pager decoder (POCSAG)\n");
 			printf("Usage: %s [options]\n", argv[0]);
 			printf("  -o <file>           Append decoded lines to <file>\n");
+			printf("  -f, --file <audio>  Decode file (wav/mp3/…) via ffmpeg, no GUI\n");
+			printf("  --invert            Force inverted audio polarity\n");
+			printf("  --no-invert         Force normal polarity\n");
 			printf("  -v, --verbose [level]  Verbose: list messages and/or debug display\n");
 			printf("                       level: 1 (or 'messages'), 2 (or 'full'), 0 (off)\n");
-			printf("                       e.g. --verbose full\n");
 			printf("  --ui=gtk|web         UI: classic GTK (default) or modern Web UI\n");
-			printf("  --ui gtk|web         Same as --ui=\n");
 			return 0;
 		} else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
 			const char *level = (i + 1 < argc) ? argv[i + 1] : "";
@@ -228,6 +238,49 @@ int main(int argc, char **argv)
 
 	if (log_path)
 		pdl_platform_set_log_file(log_path);
+	if (force_invert >= 0) {
+		Profile.invert = force_invert;
+		SetAudioConfig(Profile.audioConfig > 0 ? Profile.audioConfig : 1);
+	}
+
+	/* Offline file decode: no GUI / capture. */
+	if (decode_file) {
+		if (pdl_platform_verbose() < 1)
+			pdl_platform_set_verbose(1);
+		extern void Reset_ATB(void);
+		extern POCSAG pocsag;
+		Reset_ATB();
+		SetAudioConfig(Profile.audioConfig > 0 ? Profile.audioConfig : 1);
+		char cmd[1024];
+		unsigned rate = (Profile.audioSampleRate > 0) ? (unsigned)Profile.audioSampleRate : 48000;
+		/* Same path as Pulse capture: S16LE → high byte (audio_pulse.cpp). */
+		snprintf(cmd, sizeof(cmd),
+			"ffmpeg -v error -y -i '%s' -ac 1 -ar %u -f s16le -",
+			decode_file, rate);
+		FILE *fp = popen(cmd, "r");
+		if (!fp) {
+			perror("popen ffmpeg");
+			return 1;
+		}
+		int16_t s16[2048];
+		char u8[2048];
+		size_t n;
+		long total = 0;
+		while ((n = fread(s16, sizeof(int16_t), 2048, fp)) > 0) {
+			for (size_t i = 0; i < n; i++)
+				u8[i] = (char)(s16[i] >> 8);
+			pdl_linux_feed_audio(u8, (long)n);
+			total += (long)n;
+		}
+		int rc = pclose(fp);
+		if (rc != 0)
+			fprintf(stderr, "ffmpeg failed (rc=%d)\n", rc);
+		fprintf(stderr, "Decoded %ld samples @ %u Hz, invert=%d\n",
+			total, rate, Profile.invert);
+		pocsag.frame(-1);
+		curl_global_cleanup();
+		return 0;
+	}
 
 	int ui = (cli_ui >= 0) ? cli_ui : (Profile.ui_mode == PDL_UI_WEB ? PDL_UI_WEB : PDL_UI_GTK);
 

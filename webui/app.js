@@ -109,18 +109,24 @@
       (s.cw != null ? " (" + s.cw + " cw)" : "");
     document.getElementById("nav-input").textContent = s.input || "—";
     document.getElementById("nav-mode").textContent = s.mode || "Decoder";
+    const pcOn = !!s.pcEnable;
+    const pcRow = document.getElementById("pc-status-row");
+    if (pcRow) pcRow.hidden = !pcOn;
     document.getElementById("footer-status").innerHTML =
-      '<span class="pulse"></span> ' + (s.pcStatus || s.pcLabel || "Ready");
-    document.getElementById("pc-pill-label").textContent = s.pcLabel || "Offline";
-    const dot = document.getElementById("pc-dot");
-    dot.className = "dot";
-    if (s.pcState === 2) dot.classList.add("ok");
-    else if (s.pcState === 1) dot.classList.add("warn");
+      '<span class="pulse"></span> ' + (pcOn ? (s.pcStatus || s.pcLabel || "Ready") : "Ready");
+    if (pcOn) {
+      document.getElementById("pc-pill-label").textContent = s.pcLabel || "Offline";
+      const dot = document.getElementById("pc-dot");
+      if (dot) {
+        dot.className = "dot";
+        if (s.pcState === 2) dot.classList.add("ok");
+        else if (s.pcState === 1) dot.classList.add("warn");
+      }
+    }
     const tabs = document.getElementById("pc-src-tabs");
     if (tabs) {
-      const show = !!s.pcEnable;
-      tabs.hidden = !show;
-      if (show) {
+      tabs.hidden = !pcOn;
+      if (pcOn) {
         const want = !!s.pcWant;
         document.querySelectorAll(".stab").forEach(function (t) {
           const on = (t.getAttribute("data-src") === "pagercast") === want;

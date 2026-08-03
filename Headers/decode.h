@@ -34,6 +34,16 @@ extern FLEX phase_A, phase_B, phase_C, phase_D;
 extern POCSAG pocsag;
 extern int pocsag_baud_rate, pocbit;
 
+/* POCSAG framing (standard batch). */
+#ifndef POCSAG_WORDS_PER_BATCH
+#define POCSAG_WORDS_PER_BATCH  16
+#define POCSAG_BITS_PER_WORD    32
+#define POCSAG_SYNC_BITS        32
+#define POCSAG_BATCH_BITS       (POCSAG_WORDS_PER_BATCH * POCSAG_BITS_PER_WORD)
+#define POCSAG_HOLDOFF_BITS     (POCSAG_BATCH_BITS + POCSAG_SYNC_BITS)
+#define POCSAG_PREAMBLE_HOLDOFF (POCSAG_HOLDOFF_BITS * 2)
+#endif
+
 // this table translates received modem status line combinations into
 // the received symbol; it gives the number of modem status lines that
 // are high (other than RI) for a given line status nybble

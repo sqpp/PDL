@@ -1,9 +1,17 @@
 # Build
 build/
 build_linux/
+build-pkg/
 *.o
 *.a
 pdl_linux
+
+# Packaging leftovers
+packaging/pkg/
+packaging/src/
+packaging/*.pkg.tar.zst
+packaging/pdl.ini
+*.pkg.tar.zst
 
 # IDE / editor
 .vs/

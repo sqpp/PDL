@@ -202,6 +202,7 @@ BOOL InitApplication(HINSTANCE hInstance)
 		if (dk) pdl_platform_set_pocsag_decrypt_key(dk);
 	}
 	SetAudioConfig(Profile.audioConfig > 0 ? Profile.audioConfig : 1);
+	setupecc(); /* BCH syndrome table — required for POCSAG error correction */
 	acars.read_data();
 	if (Profile.SMTP || (Profile.nMailOptions & 0x008000)) {
 		MailInit(Profile.szMailHost, Profile.szMailHeloDomain, Profile.szMailFrom,

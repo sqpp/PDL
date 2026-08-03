@@ -10,6 +10,7 @@
 #include "Headers/mobitex.h"
 #include "Headers/misc.h"
 #include "platform/pdl_platform.h"
+#include "pdl_version.h"
 #include "linux/gui_gtk.h"
 #include "linux/gui_web.h"
 #include "linux/pagercast_stream.h"
@@ -184,27 +185,8 @@ void pdl_linux_gui_prepare_dialog(GtkWidget *dlg)
 	gtk_window_set_type_hint(win, GDK_WINDOW_TYPE_HINT_DIALOG);
 	gtk_window_set_skip_taskbar_hint(win, TRUE);
 	gtk_window_set_skip_pager_hint(win, TRUE);
-	gtk_window_set_decorated(win, FALSE);
+	gtk_window_set_decorated(win, TRUE);
 	gtk_window_set_urgency_hint(win, FALSE);
-
-	/* Flat in-app title strip so we still have a heading without WM chrome. */
-	if (GTK_IS_DIALOG(dlg) && !g_object_get_data(G_OBJECT(dlg), "pdl-titlebar")) {
-		const gchar *title = gtk_window_get_title(win);
-		GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-		gtk_style_context_add_class(gtk_widget_get_style_context(bar), "pdl-dialog-title");
-		GtkWidget *lab = gtk_label_new(title && title[0] ? title : "Dialog");
-		gtk_widget_set_halign(lab, GTK_ALIGN_START);
-		gtk_widget_set_margin_start(lab, 10);
-		gtk_widget_set_margin_end(lab, 10);
-		gtk_widget_set_margin_top(lab, 6);
-		gtk_widget_set_margin_bottom(lab, 6);
-		gtk_box_pack_start(GTK_BOX(bar), lab, TRUE, TRUE, 0);
-		GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
-		gtk_box_pack_start(GTK_BOX(content), bar, FALSE, FALSE, 0);
-		gtk_box_reorder_child(GTK_BOX(content), bar, 0);
-		gtk_widget_show_all(bar);
-		g_object_set_data(G_OBJECT(dlg), "pdl-titlebar", bar);
-	}
 
 	if (parent) {
 		gtk_window_set_transient_for(win, parent);
@@ -214,6 +196,52 @@ void pdl_linux_gui_prepare_dialog(GtkWidget *dlg)
 	} else {
 		gtk_window_set_position(win, GTK_WIN_POS_CENTER);
 	}
+}
+
+/* Same shell as Options/Settings — never use GtkMessageDialog / GtkAboutDialog. */
+static gint pdl_run_styled_dialog(GtkWidget *dlg)
+{
+	gtk_widget_show_all(dlg);
+	gint r = gtk_dialog_run(GTK_DIALOG(dlg));
+	gtk_widget_destroy(dlg);
+	return r;
+}
+
+static void pdl_info_dialog(GtkWindow *parent, const char *title, const char *body)
+{
+	GtkWidget *dlg = gtk_dialog_new_with_buttons(title, parent ? parent : dialog_parent(),
+		(GtkDialogFlags)(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+		"OK", GTK_RESPONSE_ACCEPT, NULL);
+	pdl_linux_gui_prepare_dialog(dlg);
+	if (parent)
+		gtk_window_set_transient_for(GTK_WINDOW(dlg), parent);
+	GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
+	gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+	GtkWidget *lab = gtk_label_new(body);
+	gtk_label_set_selectable(GTK_LABEL(lab), TRUE);
+	gtk_widget_set_halign(lab, GTK_ALIGN_START);
+	gtk_label_set_xalign(GTK_LABEL(lab), 0.0f);
+	gtk_label_set_line_wrap(GTK_LABEL(lab), TRUE);
+	gtk_box_pack_start(GTK_BOX(content), lab, TRUE, TRUE, 0);
+	pdl_run_styled_dialog(dlg);
+}
+
+static gint pdl_confirm_dialog(GtkWindow *parent, const char *title, const char *body)
+{
+	GtkWidget *dlg = gtk_dialog_new_with_buttons(title, parent ? parent : dialog_parent(),
+		(GtkDialogFlags)(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+		"No", GTK_RESPONSE_REJECT, "Yes", GTK_RESPONSE_ACCEPT, NULL);
+	pdl_linux_gui_prepare_dialog(dlg);
+	if (parent)
+		gtk_window_set_transient_for(GTK_WINDOW(dlg), parent);
+	GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
+	gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+	GtkWidget *lab = gtk_label_new(body);
+	gtk_widget_set_halign(lab, GTK_ALIGN_START);
+	gtk_label_set_xalign(GTK_LABEL(lab), 0.0f);
+	gtk_label_set_line_wrap(GTK_LABEL(lab), TRUE);
+	gtk_box_pack_start(GTK_BOX(content), lab, TRUE, TRUE, 0);
+	return pdl_run_styled_dialog(dlg);
 }
 
 static GtkWidget *s_pane1_text = NULL;
@@ -229,6 +257,7 @@ static GtkWidget *s_dec_rate_bar = NULL, *s_dec_rate_lbl = NULL;
 static GtkWidget *s_footer_device_label = NULL;
 static GtkWidget *s_pc_footer_led = NULL;
 static GtkWidget *s_pc_footer_label = NULL;
+static GtkWidget *s_pc_footer_box = NULL;
 static GtkWidget *s_tb_pc_toggle = NULL; /* notebook: Local | PagerCast tabs */
 static GtkWidget *s_tb_pc_sep = NULL;
 static GtkWidget *s_header_label = NULL;
@@ -537,6 +566,235 @@ static void on_audio_response(GtkDialog *dialog, int response_id, gpointer user_
 }
 
 static void log_ui(const char *action, const char *detail);
+static void set_bar_pct(GtkWidget *bar, GtkWidget *lbl, double pct, const char *text);
+
+typedef struct {
+	GtkWidget *messages;
+	GtkWidget *groupcalls;
+	GtkWidget *rejected;
+	GtkWidget *blocked;
+	GtkWidget *missed;
+	GtkWidget *errors;
+	GtkWidget *clean;
+	GtkWidget *corrupt;
+	GtkWidget *rate_bar;
+	GtkWidget *rate_lbl;
+	GtkWidget *rssi_bar;
+	GtkWidget *rssi_lbl;
+	GtkWidget *sn_bar;
+	GtkWidget *sn_lbl;
+	GtkWidget *quality_bar;
+	GtkWidget *quality_lbl;
+	GtkWidget *ber_bar;
+	GtkWidget *ber_lbl;
+	GtkWidget *bch;
+	GtkWidget *filters;
+	GtkWidget *filter_hits;
+	guint timer_id;
+} StatsDialogUi;
+
+static GtkWidget *stats_kv_row(GtkWidget *box, const char *label, GtkWidget **val_out)
+{
+	GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+	GtkWidget *lab = gtk_label_new(label);
+	gtk_widget_set_halign(lab, GTK_ALIGN_START);
+	gtk_widget_set_valign(lab, GTK_ALIGN_CENTER);
+	gtk_widget_set_size_request(lab, 130, -1);
+	GtkWidget *val = gtk_label_new("—");
+	gtk_widget_set_halign(val, GTK_ALIGN_END);
+	gtk_widget_set_hexpand(val, TRUE);
+	gtk_label_set_selectable(GTK_LABEL(val), TRUE);
+	gtk_box_pack_start(GTK_BOX(row), lab, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(row), val, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
+	*val_out = val;
+	return val;
+}
+
+static GtkWidget *stats_meter_row(GtkWidget *box, const char *name, GtkWidget **bar_out, GtkWidget **lbl_out)
+{
+	GtkWidget *row = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+	GtkWidget *top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	GtkWidget *lab = gtk_label_new(name);
+	gtk_widget_set_halign(lab, GTK_ALIGN_START);
+	gtk_widget_set_hexpand(lab, TRUE);
+	gtk_style_context_add_class(gtk_widget_get_style_context(lab), "pdl-meter-label");
+	GtkWidget *val = gtk_label_new("—");
+	gtk_widget_set_halign(val, GTK_ALIGN_END);
+	gtk_style_context_add_class(gtk_widget_get_style_context(val), "pdl-meter-val");
+	gtk_box_pack_start(GTK_BOX(top), lab, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(top), val, FALSE, FALSE, 0);
+	GtkWidget *bar = gtk_progress_bar_new();
+	gtk_style_context_add_class(gtk_widget_get_style_context(bar), "pdl-meter-bar");
+	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(bar), 0.0);
+	gtk_widget_set_hexpand(bar, TRUE);
+	gtk_box_pack_start(GTK_BOX(row), top, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(row), bar, FALSE, FALSE, 0);
+	gtk_widget_set_margin_bottom(row, 4);
+	gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
+	*bar_out = bar;
+	*lbl_out = val;
+	return row;
+}
+
+static void stats_set_int(GtkWidget *lbl, int v)
+{
+	if (!lbl) return;
+	char buf[32];
+	snprintf(buf, sizeof(buf), "%d", v);
+	gtk_label_set_text(GTK_LABEL(lbl), buf);
+}
+
+static void stats_dialog_refresh(StatsDialogUi *ui)
+{
+	if (!ui) return;
+	extern int nCount_Messages, nCount_Groupcalls, nCount_Rejected, nCount_Blocked;
+	extern int nCount_Missed[2];
+	extern int nCount_CleanRx, nCount_CorruptRx;
+
+	stats_set_int(ui->messages, nCount_Messages);
+	stats_set_int(ui->groupcalls, nCount_Groupcalls);
+	stats_set_int(ui->rejected, nCount_Rejected);
+	stats_set_int(ui->blocked, nCount_Blocked);
+	stats_set_int(ui->missed, nCount_Missed[0] + nCount_Missed[1]);
+	stats_set_int(ui->errors, nCount_Rejected + iRX_LastBchErrors);
+	stats_set_int(ui->clean, nCount_CleanRx);
+	stats_set_int(ui->corrupt, nCount_CorruptRx);
+	stats_set_int(ui->filters, (int)Profile.filters.size());
+
+	unsigned long hits = 0;
+	for (size_t i = 0; i < Profile.filters.size(); i++)
+		hits += Profile.filters[i].hitcounter;
+	stats_set_int(ui->filter_hits, (int)hits);
+
+	int judged = nCount_CleanRx + nCount_CorruptRx;
+	double rate = (judged > 0) ? (100.0 * nCount_CleanRx / (double)judged) : 0.0;
+	char buf[64];
+	snprintf(buf, sizeof(buf), "%.1f%%", rate);
+	set_bar_pct(ui->rate_bar, ui->rate_lbl, rate, buf);
+
+	double level = s_meter_display_level;
+	snprintf(buf, sizeof(buf), "%.0f dBm", -90.0 + level * 0.4);
+	set_bar_pct(ui->rssi_bar, ui->rssi_lbl, level, buf);
+
+	double sn = level * 0.35;
+	snprintf(buf, sizeof(buf), "%.0f dB", sn);
+	set_bar_pct(ui->sn_bar, ui->sn_lbl, (sn / 40.0) * 100.0, buf);
+
+	double q = (bRX_MessageQuality_Valid && dRX_MessageQuality >= 0.0) ? dRX_MessageQuality
+		: (dRX_Quality >= 0.0 ? dRX_Quality : 0.0);
+	if (q < 0.0) q = 0.0;
+	if (q > 100.0) q = 100.0;
+	snprintf(buf, sizeof(buf), "%.1f%%", q);
+	set_bar_pct(ui->quality_bar, ui->quality_lbl, q, buf);
+
+	double ber = 0.0;
+	if (iRX_LastBchCodewords > 0)
+		ber = (100.0 * iRX_LastBchErrors) / (double)iRX_LastBchCodewords;
+	snprintf(buf, sizeof(buf), "%.1f%%", ber);
+	set_bar_pct(ui->ber_bar, ui->ber_lbl, ber > 100.0 ? 100.0 : ber, buf);
+
+	snprintf(buf, sizeof(buf), "%d / %d", iRX_LastBchErrors, iRX_LastBchCodewords);
+	if (ui->bch) gtk_label_set_text(GTK_LABEL(ui->bch), buf);
+}
+
+static gboolean stats_dialog_tick(gpointer data)
+{
+	StatsDialogUi *ui = (StatsDialogUi *)data;
+	if (!ui || s_quit) return G_SOURCE_REMOVE;
+	stats_dialog_refresh(ui);
+	return G_SOURCE_CONTINUE;
+}
+
+static void stats_dialog_reset_counters(void)
+{
+	extern int nCount_Messages, nCount_Groupcalls, nCount_Rejected, nCount_Blocked;
+	extern int nCount_CleanRx, nCount_CorruptRx;
+	extern int nCount_Missed[2];
+	nCount_Messages = 0;
+	nCount_Groupcalls = 0;
+	nCount_Rejected = 0;
+	nCount_Blocked = 0;
+	nCount_CleanRx = 0;
+	nCount_CorruptRx = 0;
+	nCount_Missed[0] = 0;
+	nCount_Missed[1] = 0;
+	WriteSettings();
+}
+
+static void on_stats_clicked(void)
+{
+	log_ui("Statistics", "dialog opened");
+	GtkWidget *dlg = gtk_dialog_new_with_buttons("Statistics", dialog_parent(),
+		(GtkDialogFlags)(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+		"Reset", 1,
+		"Close", GTK_RESPONSE_CLOSE, NULL);
+	gtk_window_set_default_size(GTK_WINDOW(dlg), 440, 620);
+	pdl_linux_gui_prepare_dialog(dlg);
+
+	GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
+	gtk_container_set_border_width(GTK_CONTAINER(content), 8);
+	GtkWidget *scroller = gtk_scrolled_window_new(NULL, NULL);
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller),
+		GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+	gtk_widget_set_vexpand(scroller, TRUE);
+	gtk_box_pack_start(GTK_BOX(content), scroller, TRUE, TRUE, 0);
+	GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+	gtk_container_add(GTK_CONTAINER(scroller), outer);
+	gtk_widget_set_margin_end(outer, 4);
+
+	StatsDialogUi *ui = g_new0(StatsDialogUi, 1);
+
+	{
+		GtkWidget *frame = setup_frame("Signal");
+		GtkWidget *box = setup_frame_box(frame);
+		stats_meter_row(box, "RSSI", &ui->rssi_bar, &ui->rssi_lbl);
+		stats_meter_row(box, "S/N", &ui->sn_bar, &ui->sn_lbl);
+		stats_meter_row(box, "Quality", &ui->quality_bar, &ui->quality_lbl);
+		stats_meter_row(box, "BER", &ui->ber_bar, &ui->ber_lbl);
+		stats_kv_row(box, "Last BCH (err/cw):", &ui->bch);
+		gtk_box_pack_start(GTK_BOX(outer), frame, FALSE, FALSE, 0);
+	}
+	{
+		GtkWidget *frame = setup_frame("Decode");
+		GtkWidget *box = setup_frame_box(frame);
+		stats_kv_row(box, "Messages:", &ui->messages);
+		stats_kv_row(box, "Groupcalls:", &ui->groupcalls);
+		stats_kv_row(box, "Rejected:", &ui->rejected);
+		stats_kv_row(box, "Blocked:", &ui->blocked);
+		stats_kv_row(box, "Missed:", &ui->missed);
+		stats_kv_row(box, "Errors:", &ui->errors);
+		stats_kv_row(box, "Clean RX:", &ui->clean);
+		stats_kv_row(box, "Corrupt RX:", &ui->corrupt);
+		stats_meter_row(box, "Rate", &ui->rate_bar, &ui->rate_lbl);
+		gtk_box_pack_start(GTK_BOX(outer), frame, FALSE, FALSE, 0);
+	}
+	{
+		GtkWidget *frame = setup_frame("Filters");
+		GtkWidget *box = setup_frame_box(frame);
+		stats_kv_row(box, "Active filters:", &ui->filters);
+		stats_kv_row(box, "Total hits:", &ui->filter_hits);
+		gtk_box_pack_start(GTK_BOX(outer), frame, FALSE, FALSE, 0);
+	}
+
+	stats_dialog_refresh(ui);
+	ui->timer_id = g_timeout_add(250, stats_dialog_tick, ui);
+
+	gtk_widget_show_all(dlg);
+	for (;;) {
+		gint resp = gtk_dialog_run(GTK_DIALOG(dlg));
+		if (resp == 1) {
+			stats_dialog_reset_counters();
+			stats_dialog_refresh(ui);
+			continue;
+		}
+		break;
+	}
+	if (ui->timer_id)
+		g_source_remove(ui->timer_id);
+	g_free(ui);
+	gtk_widget_destroy(dlg);
+}
 
 static void on_audio_clicked(GtkWidget *btn, gpointer data)
 {
@@ -871,21 +1129,9 @@ static void on_menu_activate(GtkMenuItem *item, gpointer data)
 		case IDM_COPY_LOWER:
 			copy_pane_to_clipboard(1);
 			return;
-		case IDM_MONSTAT: {
-			char buf[512];
-			extern int nCount_Messages, nCount_Rejected, nCount_Blocked;
-			snprintf(buf, sizeof(buf),
-				"Messages: %d\nRejected: %d\nBlocked: %d\nFilters: %zu\nRX Quality: %.1f\nLast BCH errors: %d",
-				nCount_Messages, nCount_Rejected, nCount_Blocked,
-				Profile.filters.size(), dRX_MessageQuality, iRX_LastBchErrors);
-			GtkWidget *d = gtk_message_dialog_new(dialog_parent(), GTK_DIALOG_MODAL,
-				GTK_MESSAGE_INFO, GTK_BUTTONS_OK, "%s", buf);
-pdl_linux_gui_prepare_dialog(d);
-			gtk_window_set_title(GTK_WINDOW(d), "Monitor Statistics");
-			gtk_dialog_run(GTK_DIALOG(d));
-			gtk_widget_destroy(d);
+		case IDM_MONSTAT:
+			on_stats_clicked();
 			return;
-		}
 		case IDM_SYSTEMTRAY:
 			if (s_mi_tray)
 				Profile.SystemTray = gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(s_mi_tray)) ? 1 : 0;
@@ -917,17 +1163,62 @@ pdl_linux_gui_prepare_dialog(d);
 		case IDM_ABOUT: {
 			log_ui("Menu About", NULL);
 			{
-				extern char *pdl_version;
-				char about[512];
-				snprintf(about, sizeof(about),
-					"%s\n\nPager data decoder for Linux.\n"
-					"POCSAG active · FLEX / ACARS / MOBITEX / ERMES unavailable",
-					pdl_version ? pdl_version : "PDL");
-				GtkWidget *d = gtk_message_dialog_new(dialog_parent(), GTK_DIALOG_MODAL,
-					GTK_MESSAGE_INFO, GTK_BUTTONS_OK, "%s", about);
-				pdl_linux_gui_prepare_dialog(d);
-				gtk_dialog_run(GTK_DIALOG(d));
-				gtk_widget_destroy(d);
+				GtkWidget *dlg = gtk_dialog_new_with_buttons("About PDL", dialog_parent(),
+					(GtkDialogFlags)(GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+					"OK", GTK_RESPONSE_ACCEPT, NULL);
+				gtk_window_set_default_size(GTK_WINDOW(dlg), 420, 220);
+				pdl_linux_gui_prepare_dialog(dlg);
+
+				GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
+				gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+
+				GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+				gtk_box_pack_start(GTK_BOX(content), row, TRUE, TRUE, 0);
+
+				{
+					char icon_path[PATH_MAX];
+					GtkWidget *img = NULL;
+					if (find_app_icon_path(icon_path, sizeof(icon_path)) == 0) {
+						GError *err = NULL;
+						GdkPixbuf *pb = gdk_pixbuf_new_from_file_at_size(icon_path, 64, 64, &err);
+						if (pb) {
+							img = gtk_image_new_from_pixbuf(pb);
+							g_object_unref(pb);
+						} else if (err) {
+							g_error_free(err);
+						}
+					}
+					if (!img)
+						img = gtk_image_new_from_icon_name("pdl", GTK_ICON_SIZE_DIALOG);
+					gtk_widget_set_valign(img, GTK_ALIGN_START);
+					gtk_box_pack_start(GTK_BOX(row), img, FALSE, FALSE, 0);
+				}
+
+				GtkWidget *col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+				gtk_box_pack_start(GTK_BOX(row), col, TRUE, TRUE, 0);
+
+				GtkWidget *name = gtk_label_new(NULL);
+				gtk_label_set_markup(GTK_LABEL(name), "<span size='large'><b>PDL</b></span>");
+				gtk_widget_set_halign(name, GTK_ALIGN_START);
+				gtk_box_pack_start(GTK_BOX(col), name, FALSE, FALSE, 0);
+
+				char line[160];
+				snprintf(line, sizeof(line), "Version %s", PDL_VERSION);
+				GtkWidget *ver = gtk_label_new(line);
+				gtk_widget_set_halign(ver, GTK_ALIGN_START);
+				gtk_box_pack_start(GTK_BOX(col), ver, FALSE, FALSE, 0);
+
+				GtkWidget *desc = gtk_label_new("Pager Data Linux — native pager decoder.");
+				gtk_widget_set_halign(desc, GTK_ALIGN_START);
+				gtk_label_set_line_wrap(GTK_LABEL(desc), TRUE);
+				gtk_box_pack_start(GTK_BOX(col), desc, FALSE, FALSE, 0);
+
+				snprintf(line, sizeof(line), "Built %s %s", PDL_BUILD_DATE, PDL_BUILD_TIME);
+				GtkWidget *built = gtk_label_new(line);
+				gtk_widget_set_halign(built, GTK_ALIGN_START);
+				gtk_box_pack_start(GTK_BOX(col), built, FALSE, FALSE, 0);
+
+				pdl_run_styled_dialog(dlg);
 			}
 			return;
 		}
@@ -1380,13 +1671,9 @@ static void on_options_clicked(void)
 		WriteSettings();
 		pdl_linux_gui_update_title();
 		if (ui_changed) {
-			GtkWidget *ask = gtk_message_dialog_new(dialog_parent(),
-				GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+			gint r = pdl_confirm_dialog(GTK_WINDOW(dlg), "Restart",
 				"Interface mode saved. Restart now to apply?");
-			pdl_linux_gui_prepare_dialog(ask);
-			gint r = gtk_dialog_run(GTK_DIALOG(ask));
-			gtk_widget_destroy(ask);
-			if (r == GTK_RESPONSE_YES) {
+			if (r == GTK_RESPONSE_ACCEPT) {
 				gtk_widget_destroy(dlg);
 				g_free(pcui);
 				pdl_linux_apply_ui_mode(want_ui, 1);
@@ -1549,12 +1836,8 @@ static void on_filters_clicked(void)
 			while (cap && *cap == ' ') cap++;
 			while (txt && *txt == ' ') txt++;
 			if ((!cap || !cap[0]) && (!txt || !txt[0])) {
-				GtkWidget *err = gtk_message_dialog_new(GTK_WINDOW(dlg), GTK_DIALOG_MODAL,
-					GTK_MESSAGE_WARNING, GTK_BUTTONS_OK,
+				pdl_info_dialog(GTK_WINDOW(dlg), "Filters",
 					"Enter a capcode and/or text before adding a filter.");
-pdl_linux_gui_prepare_dialog(err);
-				gtk_dialog_run(GTK_DIALOG(err));
-				gtk_widget_destroy(err);
 				continue;
 			}
 			FILTER f;
@@ -1886,8 +2169,12 @@ static void apply_app_theme(void)
 		".pdl-side-panel-body { padding: 4px 16px 16px 16px; }\n"
 		".pdl-meter-label { color: #444; font-size: 10px; font-weight: bold; letter-spacing: 0.5px; }\n"
 		".pdl-meter-val { color: #1a1a1a; font-family: monospace; font-size: 11px; }\n"
-		".pdl-meter-bar trough { background: #c8c8c8; border-radius: 2px; min-height: 8px; box-shadow: none; }\n"
-		".pdl-meter-bar progress { background: #3a7bd5; border-radius: 2px; box-shadow: none; }\n"
+		".pdl-meter-bar trough {\n"
+		"  background: #c8c8c8; border-radius: 3px; min-height: 10px;\n"
+		"  padding: 1px 3px; box-shadow: none; }\n"
+		".pdl-meter-bar progress {\n"
+		"  background: #3a7bd5; border-radius: 2px; min-height: 6px;\n"
+		"  box-shadow: none; margin: 0; }\n"
 		"paned separator { background: #c0c0c0; }\n"
 		"scrolledwindow { border: none; box-shadow: none; background-color: #e8e8e8; }\n"
 		"dialog.pdl-dialog, messagedialog.pdl-dialog, .pdl-dialog,"
@@ -2286,8 +2573,12 @@ static void update_rx_quality_display(void)
 	snprintf(buf, sizeof(buf), "%d", missed);
 	set_bar_pct(s_dec_missed_bar, s_dec_missed_lbl, missed > 0 ? fmin(100.0, (double)missed) : 0.0, buf);
 
-	snprintf(buf, sizeof(buf), "%.1f%%", s_rx_display_quality);
-	set_bar_pct(s_dec_rate_bar, s_dec_rate_lbl, s_rx_display_quality, buf);
+	/* Clean / corrupt among messages that actually got BCH stats. */
+	extern int nCount_CleanRx, nCount_CorruptRx;
+	int judged = nCount_CleanRx + nCount_CorruptRx;
+	double rate = (judged > 0) ? (100.0 * nCount_CleanRx / (double)judged) : 0.0;
+	snprintf(buf, sizeof(buf), "%.1f%%", rate);
+	set_bar_pct(s_dec_rate_bar, s_dec_rate_lbl, rate, buf);
 }
 
 /* Timer: read level, smooth, refresh sidebar meters. */
@@ -2303,7 +2594,7 @@ static gboolean meter_cb(gpointer user_data)
 	double alpha = (diff > 0.0) ? 0.72 : 0.38;
 	s_meter_display_level += alpha * diff;
 	update_rx_quality_display();
-	if (s_pc_footer_led || s_pc_footer_label)
+	if (Profile.pagercast_enabled && (s_pc_footer_led || s_pc_footer_label))
 		pc_update_status_widgets(s_pc_footer_led, s_pc_footer_label);
 	return G_SOURCE_CONTINUE;
 }
@@ -2412,12 +2703,8 @@ static gboolean on_delete_event(GtkWidget *widget, GdkEvent *event, gpointer dat
 {
 	(void)widget; (void)event; (void)data;
 	if (!Profile.confirmExit) return FALSE;
-	GtkWidget *ask = gtk_message_dialog_new(GTK_WINDOW(s_win), GTK_DIALOG_MODAL,
-		GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO, "Exit PDL?");
-pdl_linux_gui_prepare_dialog(ask);
-	gint r = gtk_dialog_run(GTK_DIALOG(ask));
-	gtk_widget_destroy(ask);
-	return (r != GTK_RESPONSE_YES);
+	gint r = pdl_confirm_dialog(GTK_WINDOW(s_win), "Exit", "Exit PDL?");
+	return (r != GTK_RESPONSE_ACCEPT);
 }
 
 void pdl_linux_gui_quit(void)
@@ -2468,6 +2755,10 @@ void pdl_linux_gui_sync_pagercast_toggle(void)
 		if (show) gtk_widget_show(s_tb_pc_sep);
 		else gtk_widget_hide(s_tb_pc_sep);
 	}
+	if (s_pc_footer_box) {
+		if (show) gtk_widget_show(s_pc_footer_box);
+		else gtk_widget_hide(s_pc_footer_box);
+	}
 	pdl_apply_message_column_layout();
 	refresh_message_header();
 	if (!show || !s_tb_pc_toggle) return;
@@ -2484,12 +2775,8 @@ static void set_pagercast_source(int pagercast_on)
 	if (pagercast_on) {
 		if (!Profile.pagercast_frequency[0] || !Profile.pagercast_api_key[0]) {
 			pc_toggle_update_labels(0);
-			GtkWidget *dlg = gtk_message_dialog_new(dialog_parent(), GTK_DIALOG_MODAL,
-				GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+			pdl_info_dialog(NULL, "PagerCast",
 				"Configure frequency and API key in Settings → Integrations first.");
-			pdl_linux_gui_prepare_dialog(dlg);
-			gtk_dialog_run(GTK_DIALOG(dlg));
-			gtk_widget_destroy(dlg);
 			return;
 		}
 		pc_toggle_update_labels(1);
@@ -2750,6 +3037,7 @@ int pdl_linux_gui_init(int *argc, char ***argv)
 	gtk_box_pack_start(GTK_BOX(footer), s_footer_device_label, TRUE, TRUE, 0);
 
 	GtkWidget *pc_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	s_pc_footer_box = pc_box;
 	gtk_widget_set_halign(pc_box, GTK_ALIGN_END);
 	gtk_widget_set_margin_end(pc_box, 4);
 	GtkWidget *pc_tag = gtk_label_new("PagerCast");
@@ -2770,6 +3058,7 @@ int pdl_linux_gui_init(int *argc, char ***argv)
 	gtk_box_pack_start(GTK_BOX(main_box), footer, FALSE, FALSE, 0);
 
 	gtk_widget_show_all(win);
+	pdl_linux_gui_sync_pagercast_toggle();
 	gtk_window_present(GTK_WINDOW(win));
 	pdl_linux_gui_update_title();
 	update_rx_quality_display();

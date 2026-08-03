@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-deb:
+    name: Build .deb (Ubuntu)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ pkg-config file dpkg-dev \
+            libssl-dev libasound2-dev libpulse-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev
+
+      - name: Build & package
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr
+          cmake --build build -j"$(nproc)"
+          cd build && cpack -G DEB
+          ls -la *.deb
+
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-packages
+          path: build/*.deb
+          if-no-files-found: error
+
+  build-rpm:
+    name: Build .rpm (Fedora)
+    runs-on: ubuntu-24.04
+    container: fedora:41
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf install -y \
+            cmake gcc-c++ pkgconf-pkg-config rpm-build \
+            openssl-devel alsa-lib-devel pulseaudio-libs-devel \
+            gtk3-devel webkit2gtk4.1-devel libcurl-devel \
+            file which
+
+      - name: Build & package
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr
+          cmake --build build -j"$(nproc)"
+          cd build && cpack -G RPM
+          ls -la *.rpm
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-packages
+          path: build/*.rpm
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [build-deb, build-rpm]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List assets
+        run: find dist -type f | sort
+
+      - name: Extract version & notes
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          NOTES_FILE="release-notes.md"
+          if [[ -f CHANGELOG.md ]]; then
+            # Section for this version through the next ## heading
+            awk -v ver="${VERSION}" '
+              $0 ~ "^## \\[" ver "\\]" {grab=1}
+              grab && $0 ~ /^## \[/ && $0 !~ "\\[" ver "\\]" {exit}
+              grab {print}
+            ' CHANGELOG.md > "${NOTES_FILE}"
+          fi
+          if [[ ! -s "${NOTES_FILE}" ]]; then
+            echo "PDL ${VERSION}" > "${NOTES_FILE}"
+          fi
+          {
+            echo ""
+            echo "### Packages"
+            echo "- \`.deb\` — Debian / Ubuntu (x86_64)"
+            echo "- \`.rpm\` — Fedora / RHEL-compatible (x86_64)"
+            echo "- Source archive — attached by GitHub from this tag"
+            echo ""
+            echo "Arch Linux: use \`packaging/PKGBUILD\` against tag \`${TAG}\`."
+          } >> "${NOTES_FILE}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: PDL ${{ steps.meta.outputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: |
+            dist/*.deb
+            dist/*.rpm
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

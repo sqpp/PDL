@@ -17,6 +17,14 @@
 #include "Headers/gfx.h"
 #include "Headers/misc.h"
 #include "Headers/helper_funcs.h"
+#include "Headers/decode.h"
+
+/* Keep pocbit from expiring mid-page (one batch + sync to reacquire). */
+static void pocsag_keep_alive(void)
+{
+	if (pocbit < POCSAG_HOLDOFF_BITS)
+		pocbit = POCSAG_HOLDOFF_BITS;
+}
 
 #define TYPE_TONE_ONLY	0x01
 #define TYPE_NUMERIC	0x02
@@ -123,11 +131,11 @@ void POCSAG::frame(int bit)
 		if (nh < 5)
 		{
 			bSynced = true;
-
 			iWordNumber = 0;
 			cc = 0;
+			pocsag_keep_alive();
 		}
-		else if (nh == 32)	// 32 errors, so must be inverted
+		else if (nh == 32)	/* fully inverted sync word */
 		{
 #ifdef __linux__
 			/* PagerCast owns polarity via its slicer — don't flip global invert mid-stream. */
@@ -140,9 +148,9 @@ void POCSAG::frame(int bit)
 			InvertData();	// Invert receive polarity
 
 			bSynced = true;
-
 			iWordNumber = 0;
 			cc = 0;
+			pocsag_keep_alive();
 		}
 	}
 	else	// format, process 16 by 32 bit paging block
@@ -155,21 +163,15 @@ void POCSAG::frame(int bit)
 			nh = nOnes(sr0 ^ 0x7A89) + nOnes(sr1 ^ 0xC197);
 
 			/*
-			 * Idle must be exact (or near-exact on noisy RF). Soft match nh < 5
-			 * truncated short alpha pages mid-body → "15555550100: @*" instead of
-			 * the real text. PagerCast baseband is clean digital — require exact idle.
+			 * While a page is open, require an exact idle codeword. Loose idle
+			 * matching treats mid-body data as IDLE and truncates alpha pages.
+			 * Between pages, allow 1-bit idle errors (RF).
 			 */
-			int idle_max = 2; /* RF: allow up to 2 bit errors */
-#ifdef __linux__
-			extern int pdl_pagercast_is_wanted(void);
-			if (pdl_pagercast_is_wanted())
-				idle_max = 0; /* exact idle only on clean digital stream */
-			else if (bAddressWord && wordc > 0)
-				idle_max = 1; /* stricter once payload started */
-#endif
+			const int idle_max = bAddressWord ? 0 : 1;
+
 			if (nh <= idle_max)
 			{
-				pocbit = 170;	// keep from switching back to flex if idle
+				pocsag_keep_alive();
 
 				if (bAddressWord)
 				{
@@ -184,7 +186,7 @@ void POCSAG::frame(int bit)
 			iWordNumber++;	// Number of Words
 			cc = 0;
 		}
-		if (iWordNumber == 16)
+		if (iWordNumber == POCSAG_WORDS_PER_BATCH)
 		{
 			bSynced = false;	// if block count is zero go back to look for sync word
 		}
@@ -197,7 +199,8 @@ void POCSAG::process_word(int fn2)
 	static unsigned int du;
 	int i, errl = ecd();		// run error correcting routine
 
-	if (errl < 2) pocbit = 170;
+	/* Extend hold-off on every codeword so noisy stretches don't drop the page. */
+	pocsag_keep_alive();
 
 	if (ob[MSB] == 1)	// MSB=1 means message
 	{
@@ -250,6 +253,11 @@ void POCSAG::process_word(int fn2)
 	}
 	else		// MSB bit = 0 means address
 	{
+		/* Uncorrectable "address" mid-page is usually a flipped data word —
+		 * treating it as a new address flushed pages early (truncated alpha). */
+		if (errl > 2 && bAddressWord && wordc > 0)
+			return;
+
 		// Flush any previous pending message before a new address.
 		if (bAddressWord)
 		{

@@ -532,7 +532,7 @@ void Audio_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 						display_showmo(MODE_POCSAG+MODE_P512);
 						pocsag_baud_rate = STAT_POCSAG512;	//used by POCSAG routines
 						nSamples = 0;
-						pocbit=1300;
+						pocbit = POCSAG_PREAMBLE_HOLDOFF;
 						config_index=INDEX512;
 						clkt_hi = COURSE_CLKT_HI;
 						clkt_lo = COURSE_CLKT_LO;
@@ -553,7 +553,7 @@ void Audio_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 						display_showmo(MODE_POCSAG+MODE_P1200);
 						pocsag_baud_rate = STAT_POCSAG1200;
 						nSamples = 0;
-						pocbit=1250;
+						pocbit = POCSAG_PREAMBLE_HOLDOFF;
 						config_index=INDEX1200;
 						continue;
 					}
@@ -572,7 +572,7 @@ void Audio_To_Bits(char *lpAudioBuffer, long LenAudioBuffer)
 						display_showmo(MODE_POCSAG+MODE_P2400);
 						pocsag_baud_rate = STAT_POCSAG2400;
 						nSamples = 0;
-						pocbit=1250;
+						pocbit = POCSAG_PREAMBLE_HOLDOFF;
 						config_index=INDEX2400;
 						continue;
 					}

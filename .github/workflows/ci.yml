@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [alpha, main, master]
+  pull_request:
+    branches: [alpha, main, master]
+
+jobs:
+  build:
+    name: Build (Ubuntu)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ pkg-config \
+            libssl-dev libasound2-dev libpulse-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Version check
+        run: |
+          ./build/pdl --help | head -5
+          grep -q 'PDL_VERSION_MINOR 2' CMakeLists.txt

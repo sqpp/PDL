@@ -2944,12 +2944,22 @@ bool bRX_MessageQuality_Valid = false;
 void UpdateMessageRxStats(int bch_errors, int codewords)
 {
 	static int win_errors = 0, win_codewords = 0;
+	extern int nCount_CleanRx, nCount_CorruptRx;
 
 	if (codewords <= 0)
 		return;
 
 	iRX_LastBchErrors = bch_errors;
 	iRX_LastBchCodewords = codewords;
+
+	/* Per-message quality: garbled pages (e.g. "+++TI") must not count as success. */
+	double msg_q = 100.0 - ((double)bch_errors * 100.0 / (double)codewords);
+	if (msg_q < 0.0) msg_q = 0.0;
+	if (msg_q > 100.0) msg_q = 100.0;
+	if (msg_q >= 80.0)
+		nCount_CleanRx++;
+	else
+		nCount_CorruptRx++;
 
 	win_errors += bch_errors;
 	win_codewords += codewords;

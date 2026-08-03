@@ -5,9 +5,11 @@ cmake_minimum_required(VERSION 3.10)
 project(PDL CXX)
 
 set(PDL_VERSION_MAJOR 3)
-set(PDL_VERSION_MINOR 1)
+set(PDL_VERSION_MINOR 2)
 set(PDL_VERSION_PATCH 0)
 set(PDL_VERSION "${PDL_VERSION_MAJOR}.${PDL_VERSION_MINOR}.${PDL_VERSION_PATCH}")
+string(TIMESTAMP PDL_BUILD_DATE "%Y-%m-%d")
+string(TIMESTAMP PDL_BUILD_TIME "%H:%M:%S")
 
 if(NOT UNIX OR APPLE)
   message(FATAL_ERROR "PDL is a Linux port only. This project does not build on Windows or macOS.")

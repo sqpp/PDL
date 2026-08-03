@@ -206,6 +206,20 @@ BOOL GetPrivateProfileSettings(LPCTSTR lpszAppTitle, LPCTSTR lpszIniPathName, PP
 	kf_get_str(kf, "PagerCast", "ApiKey", pProfile->pagercast_api_key, sizeof(pProfile->pagercast_api_key));
 	kf_get_str(kf, "PagerCast", "HostSuffix", pProfile->pagercast_host_suffix, sizeof(pProfile->pagercast_host_suffix));
 
+	{
+		extern int nCount_Messages, nCount_Groupcalls, nCount_Rejected, nCount_Blocked;
+		extern int nCount_CleanRx, nCount_CorruptRx;
+		extern int nCount_Missed[2];
+		nCount_Messages = kf_get_int(kf, "Stats", "Messages", nCount_Messages);
+		nCount_Groupcalls = kf_get_int(kf, "Stats", "Groupcalls", nCount_Groupcalls);
+		nCount_Rejected = kf_get_int(kf, "Stats", "Rejected", nCount_Rejected);
+		nCount_Blocked = kf_get_int(kf, "Stats", "Blocked", nCount_Blocked);
+		nCount_CleanRx = kf_get_int(kf, "Stats", "CleanRx", nCount_CleanRx);
+		nCount_CorruptRx = kf_get_int(kf, "Stats", "CorruptRx", nCount_CorruptRx);
+		nCount_Missed[0] = kf_get_int(kf, "Stats", "Missed0", nCount_Missed[0]);
+		nCount_Missed[1] = kf_get_int(kf, "Stats", "Missed1", nCount_Missed[1]);
+	}
+
 	g_key_file_free(kf);
 	if (s_ini_decrypt_key[0])
 		pdl_platform_set_pocsag_decrypt_key(s_ini_decrypt_key);
@@ -335,6 +349,20 @@ void WriteSettings(void)
 	kf_set_str(kf, "PagerCast", "ApiKey", Profile.pagercast_api_key);
 	kf_set_str(kf, "PagerCast", "HostSuffix",
 		Profile.pagercast_host_suffix[0] ? Profile.pagercast_host_suffix : "pagercast.com");
+
+	{
+		extern int nCount_Messages, nCount_Groupcalls, nCount_Rejected, nCount_Blocked;
+		extern int nCount_CleanRx, nCount_CorruptRx;
+		extern int nCount_Missed[2];
+		kf_set_int(kf, "Stats", "Messages", nCount_Messages);
+		kf_set_int(kf, "Stats", "Groupcalls", nCount_Groupcalls);
+		kf_set_int(kf, "Stats", "Rejected", nCount_Rejected);
+		kf_set_int(kf, "Stats", "Blocked", nCount_Blocked);
+		kf_set_int(kf, "Stats", "CleanRx", nCount_CleanRx);
+		kf_set_int(kf, "Stats", "CorruptRx", nCount_CorruptRx);
+		kf_set_int(kf, "Stats", "Missed0", nCount_Missed[0]);
+		kf_set_int(kf, "Stats", "Missed1", nCount_Missed[1]);
+	}
 
 	gsize len = 0;
 	gchar *data = g_key_file_to_data(kf, &len, NULL);

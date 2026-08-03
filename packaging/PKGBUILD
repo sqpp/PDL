@@ -3,11 +3,11 @@
 # For a local tree (no tag yet): makepkg -si -p PKGBUILD.local
 
 pkgname=pdl
-pkgver=3.1.0
+pkgver=3.2.0
 pkgrel=1
 pkgdesc="Pager Data Linux — POCSAG pager decoder with optional PagerCast stream"
 arch=('x86_64' 'aarch64')
-url="https://github.com/YOUR_USER/PDL"
+url="https://github.com/sqpp/PDL"
 license=('custom')
 depends=(
   'gtk3'
@@ -18,7 +18,7 @@ depends=(
   'openssl'
 )
 makedepends=('cmake' 'pkgconf' 'gcc')
-source=("${pkgname}-${pkgver}.tar.gz::https://github.com/YOUR_USER/PDL/archive/refs/tags/v${pkgver}.tar.gz")
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/sqpp/PDL/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
 build() {

@@ -4,7 +4,7 @@ Native Linux pager decoder. **POCSAG** is the supported decoder; FLEX, ACARS, MO
 
 ## Version
 
-`PDL <major.minor.patch> (Linux · POCSAG)` — set in CMake (`PDL_VERSION`).
+`PDL <major.minor.patch>` — set in CMake (`PDL_VERSION`). See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
